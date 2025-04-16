@@ -25,7 +25,11 @@ class DatabaseManager:
             conn.execute("PRAGMA foreign_keys = ON")
             
             cursor = conn.cursor()
-            
+            # Kiểm tra và thêm cột province nếu chưa tồn tại
+            cursor.execute("PRAGMA table_info(vehicles)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "province" not in columns:
+                cursor.execute("ALTER TABLE vehicles ADD COLUMN province TEXT")
             # Tạo bảng Vehicle
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS vehicles (
@@ -36,6 +40,7 @@ class DatabaseManager:
                 vehicle_type TEXT NOT NULL,
                 brand TEXT NOT NULL,
                 color TEXT,
+                province TEXT,
                 register_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 notes TEXT
@@ -112,7 +117,7 @@ class DatabaseManager:
             VALUES (?, ?, ?)
             ''', (key, value, type_name))
     
-    def add_vehicle(self, plate, owner, phone, vehicle_type, brand, color="Không có thông tin", notes=""):
+    def add_vehicle(self, plate, owner, phone, vehicle_type, brand, color="Không có thông tin", province="", notes=""):
         """Thêm xe mới vào database"""
         conn = None
         try:
@@ -133,9 +138,10 @@ class DatabaseManager:
             
             # Thêm xe mới
             cursor.execute('''
-            INSERT INTO vehicles (plate, owner, phone, vehicle_type, brand, color, register_time, last_update, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (plate, owner, phone, vehicle_type, brand, color, current_time, current_time, notes))
+                INSERT INTO vehicles (plate, owner, phone, vehicle_type, brand, color, province, register_time, last_update, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (plate, owner, phone, vehicle_type, brand, color, province, current_time, current_time, notes))
+                
             
             vehicle_id = cursor.lastrowid
             
@@ -156,6 +162,7 @@ class DatabaseManager:
                 "type": vehicle_type,
                 "brand": brand,
                 "color": color,
+                "province": province,
                 "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M"),
                 "notes": notes
             }
@@ -200,7 +207,7 @@ class DatabaseManager:
             
             # Chuẩn bị câu lệnh SQL và tham số
             allowed_fields = {'owner': 'owner', 'phone': 'phone', 'vehicle_type': 'type',
-                             'brand': 'brand', 'color': 'color', 'notes': 'notes'}
+                             'brand': 'brand', 'color': 'color','province': 'province',  'notes': 'notes'}
             sql_fields = []
             sql_values = []
             changes = []
@@ -305,7 +312,7 @@ class DatabaseManager:
             if conn:
                 conn.close()
     
-    def search_vehicles(self, search_text=None, vehicle_type=None, brand=None, date=None, limit=100):
+    def search_vehicles(self, search_text=None, vehicle_type=None, brand=None, province=None, date=None, limit=100):
         """Tìm kiếm xe với nhiều tiêu chí"""
         conn = None
         try:
@@ -327,7 +334,9 @@ class DatabaseManager:
             if brand and brand != "Tất cả":
                 sql_query += " AND brand = ?"
                 sql_params.append(brand)
-            
+            if province and province != "Tất cả":
+                sql_query += " AND province = ?"
+                sql_params.append(province)
             if date:
                 sql_query += " AND DATE(register_time) = DATE(?)"
                 sql_params.append(date)
@@ -572,6 +581,7 @@ class DatabaseManager:
                         "type": "Sedan",
                         "brand": "Toyota",
                         "color": "Đen",
+                        "province": "Hà Nội", 
                         "notes": "Xe đăng ký lần đầu"
                     },
                     {
@@ -581,6 +591,7 @@ class DatabaseManager:
                         "type": "SUV",
                         "brand": "Honda",
                         "color": "Trắng",
+                        "province": "Hà Nội", 
                         "notes": "Xe đã qua sử dụng"
                     },
                     {
@@ -590,6 +601,7 @@ class DatabaseManager:
                         "type": "Hatchback",
                         "brand": "Mazda",
                         "color": "Đỏ",
+                        "province": "Hà Nội", 
                         "notes": "Xe mới mua"
                     },
                     {
@@ -599,6 +611,7 @@ class DatabaseManager:
                         "type": "SUV",
                         "brand": "Ford",
                         "color": "Xanh dương",
+                        "province": "Hà Nội", 
                         "notes": "Xe công ty"
                     },
                     {
@@ -608,6 +621,7 @@ class DatabaseManager:
                         "type": "Sedan",
                         "brand": "Hyundai",
                         "color": "Bạc",
+                        "province": "Hà Nội", 
                         "notes": "Xe gia đình"
                     }
                 ]
@@ -620,6 +634,7 @@ class DatabaseManager:
                         vehicle_type=vehicle["type"],
                         brand=vehicle["brand"],
                         color=vehicle["color"],
+                        province=vehicle.get("province", ""),
                         notes=vehicle.get("notes", "")
                     )
                 
@@ -1030,7 +1045,9 @@ class DatabaseManager:
             if 'color' in criteria and criteria['color']:
                 query += " AND color = ?"
                 params.append(criteria['color'])
-                
+            if 'province' in criteria and criteria['province']:
+                query += " AND province = ?"
+                params.append(criteria['province'])
             if 'start_date' in criteria and criteria['start_date']:
                 query += " AND register_time >= ?"
                 params.append(criteria['start_date'])

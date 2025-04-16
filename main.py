@@ -4,9 +4,8 @@ from app import LicensePlateApp
 from database.db_manager import DatabaseManager
 
 def main():
-    # Khởi tạo database và nhập dữ liệu mẫu nếu cần
     db = DatabaseManager()
-    db.import_sample_data()  # Chỉ nhập dữ liệu nếu database trống
+    db.import_sample_data()  
     
     app = QApplication(sys.argv)
     window = LicensePlateApp()

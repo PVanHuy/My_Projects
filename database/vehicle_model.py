@@ -28,23 +28,24 @@ class VehicleExporter:
                 
                 # Viết header với định dạng tiếng Việt
                 writer.writerow([
-                    "STT", "Biển số", "Chủ xe", "Số điện thoại", 
-                    "Loại xe", "Hãng xe", "Màu xe", "Thời gian đăng ký", "Ghi chú"
+                "STT", "Biển số", "Chủ xe", "Số điện thoại", 
+                "Loại xe", "Hãng xe", "Màu xe", "Tỉnh/Thành phố", "Thời gian đăng ký", "Ghi chú"
+            ])
+
+            # Viết dữ liệu
+            for i, vehicle in enumerate(vehicles, start=1):
+                writer.writerow([
+                    i,
+                    vehicle.get("plate", ""),
+                    vehicle.get("owner", ""),
+                    vehicle.get("phone", ""),
+                    vehicle.get("type", ""),
+                    vehicle.get("brand", ""),
+                    vehicle.get("color", "Không có thông tin"),
+                    vehicle.get("province", ""),
+                    vehicle.get("timestamp", ""),
+                    vehicle.get("notes", "")
                 ])
-                
-                # Viết dữ liệu
-                for i, vehicle in enumerate(vehicles, start=1):
-                    writer.writerow([
-                        i,
-                        vehicle.get("plate", ""),
-                        vehicle.get("owner", ""),
-                        vehicle.get("phone", ""),
-                        vehicle.get("type", ""),
-                        vehicle.get("brand", ""),
-                        vehicle.get("color", "Không có thông tin"),
-                        vehicle.get("timestamp", ""),
-                        vehicle.get("notes", "")
-                    ])
             
             logging.info(f"Exported data to CSV: {filename}")
             return True
@@ -83,13 +84,14 @@ class VehicleExporter:
                     vehicle.get("type", ""),
                     vehicle.get("brand", ""),
                     vehicle.get("color", "Không có thông tin"),
+                    vehicle.get("province", ""),
                     vehicle.get("timestamp", ""),
                     vehicle.get("notes", "")
                 ])
                 
             # Tạo DataFrame
             columns = ["STT", "Biển số", "Chủ xe", "Số điện thoại", 
-                      "Loại xe", "Hãng xe", "Màu xe", "Thời gian đăng ký", "Ghi chú"]
+                    "Loại xe", "Hãng xe", "Màu xe", "Tỉnh/Thành phố", "Thời gian đăng ký", "Ghi chú"]
             
             df = pd.DataFrame(data, columns=columns)
             
@@ -101,7 +103,7 @@ class VehicleExporter:
                 ws.title = "Danh sách xe"
                 
                 # Thêm tiêu đề
-                ws.merge_cells('A1:I1')
+                ws.merge_cells('A1:J1')
                 title_cell = ws['A1']
                 title_cell.value = "DANH SÁCH XE ĐÃ ĐĂNG KÝ"
                 title_cell.font = Font(name='Arial', size=16, bold=True, color="0000FF")
@@ -139,14 +141,15 @@ class VehicleExporter:
                 # Định dạng kích thước cột
                 column_widths = {
                     'A': 5,   # STT
-                    'B': 15,  # Biển số
-                    'C': 25,  # Chủ xe
-                    'D': 15,  # SĐT
-                    'E': 15,  # Loại xe
-                    'F': 15,  # Hãng xe
-                    'G': 15,  # Màu xe
-                    'H': 20,  # Thời gian
-                    'I': 30,  # Ghi chú
+    'B': 15,  # Biển số
+    'C': 25,  # Chủ xe
+    'D': 15,  # SĐT
+    'E': 15,  # Loại xe
+    'F': 15,  # Hãng xe
+    'G': 15,  # Màu xe
+    'H': 20,  # Tỉnh/TP
+    'I': 20,  # Thời gian
+    'J': 30,  # Ghi chú
                 }
                 
                 for col, width in column_widths.items():
@@ -161,7 +164,7 @@ class VehicleExporter:
                 )
                 
                 for row in range(4, ws.max_row + 1):
-                    for col in range(1, 10):  # A-I
+                    for col in range(1, 11):  # A-J
                         ws.cell(row=row, column=col).border = thin_border
                 
                 # Lưu workbook
@@ -255,11 +258,12 @@ class VehicleExporter:
             
             details = [
                 f"Chủ xe: {vehicle.get('owner', 'N/A')}",
-                f"Số điện thoại: {vehicle.get('phone', 'N/A')}",
-                f"Loại xe: {vehicle.get('type', 'N/A')}",
-                f"Hãng xe: {vehicle.get('brand', 'N/A')}",
-                f"Màu xe: {vehicle.get('color', 'N/A')}",
-                f"Thời gian đăng ký: {vehicle.get('timestamp', 'N/A')}",
+    f"Số điện thoại: {vehicle.get('phone', 'N/A')}",
+    f"Loại xe: {vehicle.get('type', 'N/A')}",
+    f"Hãng xe: {vehicle.get('brand', 'N/A')}",
+    f"Màu xe: {vehicle.get('color', 'N/A')}",
+    f"Tỉnh/Thành phố: {vehicle.get('province', 'N/A')}",
+    f"Thời gian đăng ký: {vehicle.get('timestamp', 'N/A')}",
             ]
             
             for line in details:
@@ -359,14 +363,15 @@ class VehicleExporter:
         <thead>
             <tr>
                 <th class="center">STT</th>
-                <th class="center">Biển số</th>
-                <th>Chủ xe</th>
-                <th>Số điện thoại</th>
-                <th>Loại xe</th>
-                <th>Hãng xe</th>
-                <th>Màu xe</th>
-                <th>Thời gian đăng ký</th>
-                <th>Ghi chú</th>
+<th class="center">Biển số</th>
+<th>Chủ xe</th>
+<th>Số điện thoại</th>
+<th>Loại xe</th>
+<th>Hãng xe</th>
+<th>Màu xe</th>
+<th>Tỉnh/Thành phố</th>
+<th>Thời gian đăng ký</th>
+<th>Ghi chú</th>
             </tr>
         </thead>
         <tbody>
@@ -388,6 +393,7 @@ class VehicleExporter:
                 <td>{vehicle.get("type", "")}</td>
                 <td>{vehicle.get("brand", "")}</td>
                 <td>{vehicle.get("color", "Không có thông tin")}</td>
+                <td>{vehicle.get("province", "")}</td>
                 <td>{vehicle.get("timestamp", "")}</td>
                 <td>{vehicle.get("notes", "")}</td>
             </tr>"""
@@ -408,7 +414,7 @@ class VehicleExporter:
             return False
 
 
-def create_vehicle(plate, owner, phone, vehicle_type, brand, color="Không có thông tin", notes=""):
+def create_vehicle(plate, owner, phone, vehicle_type, brand, color="Không có thông tin", province="", notes=""):
     """
     Creates a new vehicle entry with the given information.
     
@@ -419,6 +425,7 @@ def create_vehicle(plate, owner, phone, vehicle_type, brand, color="Không có t
         vehicle_type (str): Type of vehicle (e.g., Sedan, SUV)
         brand (str): Vehicle manufacturer (e.g., Toyota, Honda)
         color (str, optional): Vehicle color. Defaults to "Không có thông tin".
+        province (str, optional): Province/City. Defaults to "".
         notes (str, optional): Additional notes. Defaults to "".
     
     Returns:
@@ -434,6 +441,7 @@ def create_vehicle(plate, owner, phone, vehicle_type, brand, color="Không có t
         vehicle_type=vehicle_type,
         brand=brand,
         color=color,
+        province=province,
         notes=notes
     )
     
@@ -527,6 +535,7 @@ def find_vehicle(vehicle_data, plate=None, owner=None, phone=None):
 
 # Các hàm xuất dữ liệu đơn giản hơn để giữ khả năng tương thích ngược
 def export_to_csv(vehicle_data, filename):
+    
     return VehicleExporter.export_to_csv(vehicle_data, filename)
 
 def export_to_excel(vehicle_data, filename):
@@ -567,7 +576,8 @@ def import_from_csv(filename):
                     vehicle_type = row[4]
                     brand = row[5]
                     color = row[6] if len(row) > 6 else "Không có thông tin"
-                    notes = row[8] if len(row) > 8 else ""
+                    province = row[7] if len(row) > 7 else ""
+                    notes = row[9] if len(row) > 9 else ""
                     
                     # Thêm vào database
                     success, result = db.add_vehicle(
@@ -577,6 +587,7 @@ def import_from_csv(filename):
                         vehicle_type=vehicle_type,
                         brand=brand,
                         color=color,
+                        province=province,
                         notes=notes
                     )
                     

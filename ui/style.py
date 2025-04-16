@@ -49,6 +49,7 @@ def apply_stylesheet(window):
                 background-color: {MyColor.BLACK};
                 border-bottom: 1px solid {MyColor.GRAY};
             }}
+            
         """
     else:
         additional_styles = ""
@@ -341,6 +342,19 @@ def apply_stylesheet(window):
         
         QMessageBox QPushButton {{
             min-width: 100px;
+        }}
+        /* ScrollArea styles */
+        QScrollArea {{
+            border: none;
+            background-color: transparent;
+        }}
+
+        QScrollArea > QWidget > QWidget {{
+            background-color: transparent;
+        }}
+
+        QScrollArea #content_widget {{
+            background-color: {MyColor.BACKGROUND};
         }}
     """)
 

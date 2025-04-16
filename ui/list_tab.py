@@ -68,28 +68,49 @@ def edit_selected_vehicle(main_window):
             plate_input.setEnabled(False)
             
             vehicle_type_input = QComboBox()
-            vehicle_type_input.addItems(["Sedan", "SUV", "Hatchback", "Xe máy", "Khác"])
+            vehicle_type_input.addItems(["Xe ô tô", "Xe khách", "Xe máy", "Khác"])
             # Set current type
             index = vehicle_type_input.findText(vehicle.get("type", ""))
             if index >= 0:
                 vehicle_type_input.setCurrentIndex(index)
             
             brand_input = QComboBox()
-            brand_input.addItems(["Toyota", "Honda", "Mazda", "Hyundai", "Kia", "Ford", "Khác"])
+            brand_input.addItems(["Toyota", "Honda", "Mazda", "Ford", "Hyundai", 
+            "Kia", "Mercedes-Benz", "BMW", "Audi", "Chevrolet",
+            "Nissan", "Mitsubishi", "Suzuki", "Yamaha", "Khác"])
             brand_input.setEditable(True)
             # Set current brand
             brand_input.setCurrentText(vehicle.get("brand", ""))
             
             color_input = QLineEdit()
             color_input.setText(vehicle.get("color", ""))
+            province_input = QComboBox()
+            province_input.addItems([
+                "Hà Nội", "TP Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ",
+                "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
+                "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước",
+                "Bình Thuận", "Cà Mau", "Cao Bằng", "Đắk Lắk", "Đắk Nông",
+                "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang",
+                "Hà Nam", "Hà Tĩnh", "Hải Dương", "Hậu Giang", "Hòa Bình",
+                "Hưng Yên", "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu",
+                "Lâm Đồng", "Lạng Sơn", "Lào Cai", "Long An", "Nam Định",
+                "Nghệ An", "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên",
+                "Quảng Bình", "Quảng Nam", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị",
+                "Sóc Trăng", "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên",
+                "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang", "Trà Vinh", "Tuyên Quang",
+                "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"
+            ])
+            # Set current province
+            province_input.setCurrentText(vehicle.get("province", "Hà Nội"))
             
             notes_input = QLineEdit()
-            notes_input.setText(vehicle.get("notes", ""))
-            
+            notes_input.setPlaceholderText("Ghi chú (không bắt buộc)")
+
             vehicle_form.addRow("Biển số xe:", plate_input)
             vehicle_form.addRow("Loại xe:", vehicle_type_input)
             vehicle_form.addRow("Hãng xe:", brand_input)
             vehicle_form.addRow("Màu xe:", color_input)
+            vehicle_form.addRow("Tỉnh/Thành phố:", province_input)  # Thêm vào form
             vehicle_form.addRow("Ghi chú:", notes_input)
             vehicle_group.setLayout(vehicle_form)
             
@@ -122,6 +143,7 @@ def edit_selected_vehicle(main_window):
                         'vehicle_type': vehicle_type_input.currentText(),
                         'brand': brand_input.currentText(),
                         'color': color_input.text(),
+                        'province': province_input.currentText(),
                         'notes': notes_input.text()
                     }
                     
@@ -177,14 +199,34 @@ def setup_list_tab(tab, main_window):
     type_label = QLabel("Loại xe:")
     type_combo = QComboBox()
     type_combo.addItem("Tất cả")
-    type_combo.addItems(["Sedan", "SUV", "Hatchback", "Xe máy", "Khác"])
+    type_combo.addItems(["Xe ô tô", "Xe khách", "Xe máy", "Khác"])
     
     # Brand filter
     brand_label = QLabel("Hãng xe:")
     brand_combo = QComboBox()
     brand_combo.addItem("Tất cả")
-    brand_combo.addItems(["Toyota", "Honda", "Mazda", "Hyundai", "Kia", "Ford", "Khác"])
-    
+    brand_combo.addItems(["Toyota", "Honda", "Mazda", "Ford", "Hyundai", 
+            "Kia", "Mercedes-Benz", "BMW", "Audi", "Chevrolet",
+            "Nissan", "Mitsubishi", "Suzuki", "Yamaha", "Khác"])
+    # Province filter
+    province_label = QLabel("Tỉnh/TP:")
+    province_combo = QComboBox()
+    province_combo.addItem("Tất cả")
+    province_combo.addItems([
+        "Hà Nội", "TP Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ",
+        "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
+        "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước",
+        "Bình Thuận", "Cà Mau", "Cao Bằng", "Đắk Lắk", "Đắk Nông",
+        "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang",
+        "Hà Nam", "Hà Tĩnh", "Hải Dương", "Hậu Giang", "Hòa Bình",
+        "Hưng Yên", "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu",
+        "Lâm Đồng", "Lạng Sơn", "Lào Cai", "Long An", "Nam Định",
+        "Nghệ An", "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên",
+        "Quảng Bình", "Quảng Nam", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị",
+        "Sóc Trăng", "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên",
+        "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang", "Trà Vinh", "Tuyên Quang",
+        "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"
+    ])
     # Date filter
     date_label = QLabel("Ngày đăng ký:")
     date_filter = QDateEdit()
@@ -212,6 +254,9 @@ def setup_list_tab(tab, main_window):
     filter_layout.addWidget(brand_label)
     filter_layout.addWidget(brand_combo)
     filter_layout.addSpacing(15)
+    filter_layout.addWidget(province_label)
+    filter_layout.addWidget(province_combo)
+    filter_layout.addSpacing(15)
     filter_layout.addWidget(date_label)
     filter_layout.addWidget(date_filter)
     filter_layout.addWidget(date_check)
@@ -229,10 +274,10 @@ def setup_list_tab(tab, main_window):
     table_layout = QVBoxLayout()
 
     main_window.vehicle_table = QTableWidget()
-    main_window.vehicle_table.setColumnCount(7)
+    main_window.vehicle_table.setColumnCount(8)
     main_window.vehicle_table.setHorizontalHeaderLabels([
         "STT", "Biển số", "Chủ xe", "Số điện thoại",
-        "Loại xe", "Hãng xe", "Thời gian đăng ký"
+        "Loại xe", "Hãng xe","Tỉnh/Thành phố", "Thời gian đăng ký"
     ])
     main_window.vehicle_table.setAlternatingRowColors(True)
     main_window.vehicle_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -249,7 +294,8 @@ def setup_list_tab(tab, main_window):
     header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # SĐT
     header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Loại xe
     header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Hãng xe
-    header.setSectionResizeMode(6, QHeaderView.Stretch)           # Thời gian
+    header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Tỉnh/Thành phố
+    header.setSectionResizeMode(7, QHeaderView.Stretch)           # Thời gian
 
     # Improve table header style
     main_window.vehicle_table.horizontalHeader().setStyleSheet(
@@ -302,6 +348,7 @@ def setup_list_tab(tab, main_window):
                                                                      search_text=text,
                                                                      vehicle_type=type_combo.currentText(), 
                                                                      brand=brand_combo.currentText(),
+                                                                     province=province_combo.currentText(),
                                                                      date=date_filter.date() if date_check.isChecked() else None))
     
     # Connect filters to filter function
@@ -309,6 +356,7 @@ def setup_list_tab(tab, main_window):
                                                          search_text=search_input.text(),
                                                          vehicle_type=type_combo.currentText(), 
                                                          brand=brand_combo.currentText(),
+                                                          province=province_combo.currentText(),
                                                          date=date_filter.date() if date_check.isChecked() else None))
     
     # Store filter widgets for reference
@@ -316,6 +364,7 @@ def setup_list_tab(tab, main_window):
         'search_input': search_input,
         'type_combo': type_combo,
         'brand_combo': brand_combo,
+        'province_combo': province_combo,
         'date_filter': date_filter,
         'date_check': date_check
     }
@@ -348,6 +397,7 @@ def refresh_vehicle_list(main_window):
             phone_item = QTableWidgetItem(vehicle["phone"])
             type_item = QTableWidgetItem(vehicle["type"])
             brand_item = QTableWidgetItem(vehicle["brand"])
+            province_item = QTableWidgetItem(vehicle.get("province", ""))
             date_item = QTableWidgetItem(vehicle["timestamp"])
 
             if i % 2 == 0:
@@ -356,7 +406,7 @@ def refresh_vehicle_list(main_window):
                 row_color = QBrush(QColor(MyColor.WHITE))
 
             for col, item in enumerate([index_item, plate_item, owner_item,
-                                        phone_item, type_item, brand_item, date_item]):
+                                        phone_item, type_item, brand_item,province_item, date_item]):
                 item.setBackground(row_color)
                 table.setItem(row_position, col, item)
         
@@ -368,7 +418,7 @@ def refresh_vehicle_list(main_window):
         QMessageBox.critical(main_window, "Lỗi", f"Không thể tải danh sách xe: {str(e)}")
 
 
-def filter_vehicle_list(main_window, search_text="", vehicle_type="Tất cả", brand="Tất cả", date=None):
+def filter_vehicle_list(main_window, search_text="", vehicle_type="Tất cả", brand="Tất cả", province="Tất cả", date=None):
     """Filter the vehicle list based on search criteria"""
     try:
         table = main_window.vehicle_table
@@ -387,6 +437,7 @@ def filter_vehicle_list(main_window, search_text="", vehicle_type="Tất cả", 
             search_text=search_text if search_text else None,
             vehicle_type=vehicle_type if vehicle_type != "Tất cả" else None,
             brand=brand if brand != "Tất cả" else None,
+            province=province if province != "Tất cả" else None,
             date=date_str
         )
         
@@ -622,17 +673,45 @@ def add_new_vehicle_dialog(main_window):
         
         plate_input = QLineEdit()
         plate_input.setPlaceholderText("Nhập biển số xe")
+        # Thêm validator để chỉ cho phép ký tự chữ và số, không có khoảng trắng hoặc ký tự đặc biệt
+        from PyQt5.QtGui import QRegExpValidator
+        from PyQt5.QtCore import QRegExp
+
+        # Regex chỉ cho phép chữ cái và số
+        reg_ex = QRegExp("^[A-Za-z0-9]+$")
+        plate_validator = QRegExpValidator(reg_ex)
+        plate_input.setValidator(plate_validator)
+
+        # Kết nối sự kiện textChanged để tự động chuyển đổi sang chữ in hoa
+        plate_input.textChanged.connect(lambda text: plate_input.setText(text.upper()))
         
         vehicle_type_input = QComboBox()
-        vehicle_type_input.addItems(["Sedan", "SUV", "Hatchback", "Xe máy", "Khác"])
+        vehicle_type_input.addItems(["Xe ô tô", "Xe kháchkhách", "Xe máy", "Khác"])
         
         brand_input = QComboBox()
-        brand_input.addItems(["Toyota", "Honda", "Mazda", "Hyundai", "Kia", "Ford", "Khác"])
-        brand_input.setEditable(True)
+        brand_input.addItems(["Toyota", "Honda", "Mazda", "Ford", "Hyundai", 
+        "Kia", "Mercedes-Benz", "BMW", "Audi", "Chevrolet",
+        "Nissan", "Mitsubishi", "Suzuki", "Yamaha", "Khác"])
         
         color_input = QLineEdit()
         color_input.setPlaceholderText("Nhập màu xe")
-        
+        # Thêm ComboBox province_input ở đây
+        province_input = QComboBox()
+        province_input.addItems([
+            "Hà Nội", "TP Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ",
+            "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
+            "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước",
+            "Bình Thuận", "Cà Mau", "Cao Bằng", "Đắk Lắk", "Đắk Nông",
+            "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang",
+            "Hà Nam", "Hà Tĩnh", "Hải Dương", "Hậu Giang", "Hòa Bình",
+            "Hưng Yên", "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu",
+            "Lâm Đồng", "Lạng Sơn", "Lào Cai", "Long An", "Nam Định",
+            "Nghệ An", "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên",
+            "Quảng Bình", "Quảng Nam", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị",
+            "Sóc Trăng", "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên",
+            "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang", "Trà Vinh", "Tuyên Quang",
+            "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"
+        ])
         notes_input = QLineEdit()
         notes_input.setPlaceholderText("Ghi chú (không bắt buộc)")
         
@@ -640,6 +719,7 @@ def add_new_vehicle_dialog(main_window):
         vehicle_form.addRow("Loại xe:", vehicle_type_input)
         vehicle_form.addRow("Hãng xe:", brand_input)
         vehicle_form.addRow("Màu xe:", color_input)
+        vehicle_form.addRow("Tỉnh/Thành phố:", province_input) 
         vehicle_form.addRow("Ghi chú:", notes_input)
         vehicle_group.setLayout(vehicle_form)
         
@@ -675,6 +755,7 @@ def add_new_vehicle_dialog(main_window):
                     vehicle_type=vehicle_type_input.currentText(),
                     brand=brand_input.currentText(),
                     color=color_input.text(),
+                    province=province_input.currentText(),
                     notes=notes_input.text()
                 )
                 

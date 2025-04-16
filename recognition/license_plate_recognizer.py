@@ -790,8 +790,21 @@ class LicensePlateRecognizer:
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 
                 if province_info:
-                    cv2.putText(result_image, f"({province_info})", (220, 30), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    from PIL import ImageFont, ImageDraw, Image
+
+                    # Chuyển từ OpenCV image (numpy) sang PIL
+                    result_image_pil = Image.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))
+                    draw = ImageDraw.Draw(result_image_pil)
+
+                    # Dùng font Unicode (ví dụ: Arial Unicode, hoặc font Việt Unicode khác)
+                    font = ImageFont.truetype("arial.ttf", 20)  # bạn có thể thay bằng đường dẫn đến font hỗ trợ tiếng Việt
+
+                    # Vẽ chữ tỉnh
+                    draw.text((220, 5), f"({province_info})", font=font, fill=(0, 255, 0))
+
+                    # Chuyển lại về OpenCV image
+                    result_image = cv2.cvtColor(np.array(result_image_pil), cv2.COLOR_RGB2BGR)
+
                 
                 # Return either raw or formatted text
                 if output_raw:

@@ -106,7 +106,16 @@ def setup_search_tab(tab, window):
         border-radius: 4px;
         border: 1px solid {MyColor.LIGHT_GRAY};
     """)
-    
+    window.province_label = QLabel("Tỉnh/Thành phố:")
+    window.province_label.setFont(QFont("Arial", 10, QFont.Bold))
+    window.province_value = QLabel("-")
+    window.province_value.setStyleSheet(f"""
+        color: {MyColor.TEXT_PRIMARY}; 
+        background-color: {MyColor.BACKGROUND}; 
+        padding: 10px; 
+        border-radius: 4px;
+        border: 1px solid {MyColor.LIGHT_GRAY};
+    """)
     window.phone_label = QLabel("Số điện thoại:")
     window.phone_label.setFont(QFont("Arial", 10, QFont.Bold))
     window.phone_value = QLabel("-")
@@ -148,12 +157,14 @@ def setup_search_tab(tab, window):
     result_layout.addWidget(window.type_value, 1, 1)
     result_layout.addWidget(window.brand_label, 2, 0)
     result_layout.addWidget(window.brand_value, 2, 1)
-    result_layout.addWidget(window.phone_label, 3, 0)
-    result_layout.addWidget(window.phone_value, 3, 1)
-    result_layout.addWidget(window.time_label, 4, 0)
-    result_layout.addWidget(window.time_value, 4, 1)
-    result_layout.addWidget(window.notes_label, 5, 0)
-    result_layout.addWidget(window.notes_value, 5, 1)
+    result_layout.addWidget(window.province_label, 3, 0)
+    result_layout.addWidget(window.province_value, 3, 1)
+    result_layout.addWidget(window.phone_label, 4, 0)
+    result_layout.addWidget(window.phone_value, 4, 1)
+    result_layout.addWidget(window.time_label, 5, 0)
+    result_layout.addWidget(window.time_value, 5, 1)
+    result_layout.addWidget(window.notes_label, 6, 0)
+    result_layout.addWidget(window.notes_value, 6, 1)
     
     result_group.setLayout(result_layout)
     left_layout.addWidget(result_group)
@@ -310,7 +321,9 @@ def setup_search_tab(tab, window):
             color = QLineEdit(vehicle.get("color", ""))
             color.setReadOnly(True)
             color.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
-            
+            province = QLineEdit(vehicle.get("province", ""))
+            province.setReadOnly(True)
+            province.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
             notes = QLineEdit(vehicle.get("notes", "") or "Không có ghi chú")
             notes.setReadOnly(True)
             notes.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
@@ -319,6 +332,7 @@ def setup_search_tab(tab, window):
             vehicle_layout.addRow("Loại xe:", vehicle_type)
             vehicle_layout.addRow("Hãng xe:", brand)
             vehicle_layout.addRow("Màu xe:", color)
+            vehicle_layout.addRow("Tỉnh/Thành phố:", province)
             vehicle_layout.addRow("Ghi chú:", notes)
             vehicle_group.setLayout(vehicle_layout)
             
@@ -354,6 +368,7 @@ def setup_search_tab(tab, window):
                             f.write(f"Loại xe: {vehicle_type.text()}\n")
                             f.write(f"Hãng xe: {brand.text()}\n")
                             f.write(f"Màu xe: {color.text()}\n")
+                            f.write(f"Tỉnh/Thành phố: {province.text()}\n")
                             f.write(f"Thời gian đăng ký: {vehicle.get('timestamp', '')}\n")
                             f.write(f"Ghi chú: {notes.text()}\n")
                             
@@ -453,6 +468,10 @@ def setup_search_tab(tab, window):
                 <div class="info-value">{color.text()}</div>
             </div>
             <div class="info-row">
+                <div class="info-label">Tỉnh/Thành phố:</div>
+                <div class="info-value">{province.text()}</div>
+            </div>
+            <div class="info-row">
                 <div class="info-label">Thời gian đăng ký:</div>
                 <div class="info-value">{vehicle.get('timestamp', '')}</div>
             </div>
@@ -488,6 +507,7 @@ def setup_search_tab(tab, window):
                             "type": vehicle_type.text(),
                             "brand": brand.text(),
                             "color": color.text(),
+                            "province": province.text(),
                             "timestamp": vehicle.get('timestamp', ''),
                             "notes": notes.text()
                         }
@@ -541,6 +561,7 @@ def setup_search_tab(tab, window):
         window.owner_value.setText("-")
         window.type_value.setText("-")
         window.brand_value.setText("-")
+        window.province_value.setText("-")
         window.phone_value.setText("-")
         window.time_value.setText("-")
         window.notes_value.setText("-")
@@ -575,54 +596,79 @@ def setup_search_tab(tab, window):
             window.statusBar().showMessage("Tìm kiếm đã được xóa")
     
     def scan_license_plate():
-        """Open camera or file dialog to scan license plate"""
-        # For now, just use file dialog. In a real app, this would use a camera
-        file_name, _ = QFileDialog.getOpenFileName(
-            window, 
-            "Chọn ảnh biển số", 
-            "", 
-            "Image Files (*.png *.jpg *.jpeg *.bmp)"
-        )
-        
-        if file_name:
-            # Simulate scanning process
-            window.statusBar().showMessage("Đang quét ảnh biển số...") if hasattr(window, 'statusBar') else None
+        """Open file dialog to scan license plate image using the same algorithm as register_tab"""
+        try:
+            file_name, _ = QFileDialog.getOpenFileName(
+                window, 
+                "Chọn ảnh biển số", 
+                "", 
+                "Image Files (*.png *.jpg *.jpeg *.bmp)"
+            )
             
-            # Create a progress dialog to simulate processing
-            progress = QProgressDialog("Đang xử lý ảnh biển số...", "Hủy", 0, 100, window)
-            progress.setWindowModality(Qt.WindowModal)
-            progress.setWindowTitle("Quét biển số")
-            
-            for i in range(101):
-                progress.setValue(i)
-                if progress.wasCanceled():
-                    break
-                window.processEvents()  # Keep UI responsive
-                import time
-                time.sleep(0.02)  # Simulate processing time
-            
-            # After "processing", use plate_recognition to detect plate
-            from utils.plate_recognition import recognize_license_plate
-            
-            try:
-                plate_number = recognize_license_plate(file_name)
-                if plate_number:
-                    window.search_input.setText(plate_number)
-                    # Automatically search with the detected plate
-                    search_vehicle()
-                else:
-                    QMessageBox.warning(
-                        window,
-                        "Không nhận diện được",
-                        "Không thể nhận diện biển số từ ảnh này. Vui lòng thử ảnh khác hoặc nhập biển số trực tiếp."
-                    )
-            except Exception as e:
-                QMessageBox.warning(
-                    window,
-                    "Lỗi",
-                    f"Không thể xử lý ảnh: {str(e)}"
-                )
-    
+            if file_name:
+                # Display loading message in status bar if available
+                if hasattr(window, 'statusBar'):
+                    window.statusBar().showMessage("Đang xử lý ảnh biển số...")
+                
+                # Create loading effect with progress dialog
+                progress = QProgressDialog("Đang xử lý ảnh biển số...", "Hủy", 0, 100, window)
+                progress.setWindowModality(Qt.WindowModal)
+                progress.setWindowTitle("Quét biển số")
+                progress.setMinimumDuration(500)  # Only show if operation takes more than 500ms
+                
+                # Define function to process image with proper error handling
+                def process_image():
+                    try:
+                        # Use the same plate recognition function as in register_tab.py
+                        from utils.plate_recognition import recognize_license_plate
+                        
+                        # Try to recognize the plate number
+                        plate_number = recognize_license_plate(file_name)
+                        
+                        # Update progress to 100%
+                        progress.setValue(100)
+                        
+                        if plate_number:
+                            # Set the recognized plate number in search input
+                            window.search_input.setText(plate_number)
+                            
+                            # Show a notification
+                            QMessageBox.information(
+                                window,
+                                "Nhận diện thành công",
+                                f"Đã nhận diện biển số: {plate_number}",
+                                QMessageBox.Ok
+                            )
+                            
+                            # Automatically search with the detected plate
+                            search_vehicle()
+                        else:
+                            QMessageBox.warning(
+                                window,
+                                "Không nhận diện được",
+                                "Không thể nhận diện biển số từ ảnh này. Vui lòng thử ảnh khác hoặc nhập biển số trực tiếp."
+                            )
+                    except Exception as e:
+                        logging.error(f"Error in license plate recognition: {str(e)}")
+                        QMessageBox.critical(
+                            window,
+                            "Lỗi",
+                            f"Có lỗi xảy ra khi nhận diện biển số: {str(e)}"
+                        )
+                    finally:
+                        # Close progress dialog if it's still open
+                        if progress.isVisible():
+                            progress.close()
+                        
+                        # Reset status bar message
+                        if hasattr(window, 'statusBar'):
+                            window.statusBar().showMessage("Sẵn sàng", 3000)
+                
+                # Use timer to allow UI to update before processing starts
+                QTimer.singleShot(100, process_image)
+        except Exception as e:
+            logging.error(f"Error in scan_license_plate: {str(e)}")
+            QMessageBox.critical(window, "Lỗi", f"Có lỗi xảy ra: {str(e)}")
     def export_vehicle_info():
         """Export the current vehicle information to a PDF or text file"""
         # Check if there's any vehicle info to export

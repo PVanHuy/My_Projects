@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog,
     QMessageBox, QFrame, QGroupBox, QFormLayout, QSplitter, QWidget,
-    QComboBox, QCompleter, QGraphicsDropShadowEffect, QGridLayout
+    QComboBox, QCompleter, QGraphicsDropShadowEffect, QGridLayout, QScrollArea
 )
 from PyQt5.QtGui import QPixmap, QImage, QFont, QIcon, QColor
 from PyQt5.QtCore import Qt, QTimer, QSize
@@ -19,8 +19,20 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 def setup_register_tab(tab, main_window):
     """Set up the registration tab with form and license plate recognition"""
-    layout = QVBoxLayout(tab)
+    # Tạo layout chính cho tab
+    main_layout = QVBoxLayout(tab)
+    main_layout.setContentsMargins(0, 0, 0, 0)
+    
+    # Tạo scroll area để cho phép cuộn
+    scroll_area = QScrollArea()
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    # Tạo widget chứa nội dung
+    content_widget = QWidget()
+    layout = QVBoxLayout(content_widget)
     layout.setSpacing(20)
+    layout.setContentsMargins(15, 15, 15, 15)  # Thêm padding vào nội dung
 
     # Title with icon using helper function
     title_widget = create_title_label("ĐĂNG KÝ XE MỚI", "register")
@@ -75,13 +87,22 @@ def setup_register_tab(tab, main_window):
         main_window.plate_input = QLineEdit()
         main_window.plate_input.setPlaceholderText("Nhập biển số xe")
         main_window.plate_input.setMinimumHeight(35)
-
+        # Thêm validator để chỉ cho phép ký tự chữ và số, không có khoảng trắng hoặc ký tự đặc biệt
+        from PyQt5.QtGui import QRegExpValidator
+        from PyQt5.QtCore import QRegExp
+        
+        # Regex chỉ cho phép chữ cái và số
+        reg_ex = QRegExp("^[A-Za-z0-9]+$")
+        plate_validator = QRegExpValidator(reg_ex)
+        main_window.plate_input.setValidator(plate_validator)
+        
+        # Kết nối sự kiện textChanged để tự động chuyển đổi sang chữ in hoa
+        main_window.plate_input.textChanged.connect(lambda text: main_window.plate_input.setText(text.upper()))
     # Vehicle type dropdown with common options
     if not hasattr(main_window, 'vehicle_type_input'):
         main_window.vehicle_type_input = QComboBox()
         main_window.vehicle_type_input.addItems([
-            "Sedan", "SUV", "Hatchback", "Crossover", "MPV", 
-            "Xe tải", "Xe máy", "Xe khách", "Khác"
+            "Xe ô tô", "Xe máy", "Xe khách", "Khác"
         ])
         main_window.vehicle_type_input.setMinimumHeight(35)
 
@@ -93,7 +114,6 @@ def setup_register_tab(tab, main_window):
             "Kia", "Mercedes-Benz", "BMW", "Audi", "Chevrolet",
             "Nissan", "Mitsubishi", "Suzuki", "Yamaha", "Khác"
         ])
-        main_window.brand_input.setEditable(True)
         main_window.brand_input.setMinimumHeight(35)
 
     # Color input
@@ -103,9 +123,26 @@ def setup_register_tab(tab, main_window):
             "Trắng", "Đen", "Xám", "Bạc", "Đỏ", "Xanh dương", 
             "Xanh lá", "Vàng", "Cam", "Nâu", "Hồng", "Tím", "Khác"
         ])
-        main_window.color_input.setEditable(True)
         main_window.color_input.setMinimumHeight(35)
-        
+     # Province input (new)
+    if not hasattr(main_window, 'province_input'):
+        main_window.province_input = QComboBox()
+        main_window.province_input.addItems([
+            "Hà Nội", "TP Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ",
+            "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
+            "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước",
+            "Bình Thuận", "Cà Mau", "Cao Bằng", "Đắk Lắk", "Đắk Nông",
+            "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang",
+            "Hà Nam", "Hà Tĩnh", "Hải Dương", "Hậu Giang", "Hòa Bình",
+            "Hưng Yên", "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu",
+            "Lâm Đồng", "Lạng Sơn", "Lào Cai", "Long An", "Nam Định",
+            "Nghệ An", "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên",
+            "Quảng Bình", "Quảng Nam", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị",
+            "Sóc Trăng", "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên",
+            "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang", "Trà Vinh", "Tuyên Quang",
+            "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"
+        ])
+        main_window.province_input.setMinimumHeight(35)
     # Notes input (new)
     if not hasattr(main_window, 'notes_input'):
         main_window.notes_input = QLineEdit()
@@ -117,6 +154,7 @@ def setup_register_tab(tab, main_window):
     vehicle_form.addRow("Loại xe:", main_window.vehicle_type_input)
     vehicle_form.addRow("Hãng xe:", main_window.brand_input)
     vehicle_form.addRow("Màu xe:", main_window.color_input)
+    vehicle_form.addRow("Tỉnh/Thành phố:", main_window.province_input)
     vehicle_form.addRow("Ghi chú:", main_window.notes_input)
     vehicle_group.setLayout(vehicle_form)
     
@@ -167,6 +205,10 @@ def setup_register_tab(tab, main_window):
     
     # Refresh display after short delay to ensure everything is loaded
     QTimer.singleShot(100, lambda: refresh_register_tab_display(main_window))
+    
+    # Thêm content widget vào scroll area và scroll area vào main layout
+    scroll_area.setWidget(content_widget)
+    main_layout.addWidget(scroll_area)
     
     # Apply animations
     setup_animation(owner_group, "fade")
@@ -311,6 +353,41 @@ def upload_image(main_window):
                         # Try to recognize plate number automatically
                         try:
                             plate_number = recognize_license_plate(file_name)
+
+                            # Nếu có kết quả thì tra mã tỉnh
+                            if plate_number and len(plate_number) >= 2 and plate_number[:2].isdigit():
+                                # Dictionary mã tỉnh sao chép từ file license_plate_recognizer.py
+                                province_codes = {
+                                    "11": "Cao Bằng", "12": "Lạng Sơn", "14": "Quảng Ninh", "15": "Hải Phòng",
+                                    "16": "Hải Phòng", "17": "Thái Bình", "18": "Nam Định", "19": "Phú Thọ",
+                                    "20": "Thái Nguyên", "21": "Yên Bái", "22": "Tuyên Quang", "23": "Hà Giang",
+                                    "24": "Lào Cai", "25": "Lai Châu", "26": "Sơn La", "27": "Điện Biên",
+                                    "28": "Hòa Bình", "29": "Hà Nội", "30": "Hà Nội", "31": "Hà Nội",
+                                    "32": "Hà Nội", "33": "Hà Nội", "34": "Hải Dương", "35": "Ninh Bình",
+                                    "36": "Thanh Hóa", "37": "Nghệ An", "38": "Hà Tĩnh", "43": "Đà Nẵng",
+                                    "47": "Đắk Lắk", "48": "Đắk Nông", "49": "Lâm Đồng", "50": "TPHCM",
+                                    "51": "TPHCM", "52": "TPHCM", "53": "TPHCM", "54": "TPHCM",
+                                    "55": "TPHCM", "56": "TPHCM", "57": "TPHCM", "58": "TPHCM",
+                                    "59": "TPHCM", "60": "Đồng Nai", "61": "Bình Dương", "62": "Long An",
+                                    "63": "Tiền Giang", "64": "Vĩnh Long", "65": "Cần Thơ", "66": "Đồng Tháp",
+                                    "67": "An Giang", "68": "Kiên Giang", "69": "Cà Mau", "70": "Tây Ninh",
+                                    "71": "Bến Tre", "72": "Bà Rịa - Vũng Tàu", "73": "Quảng Bình",
+                                    "74": "Quảng Trị", "75": "Thừa Thiên Huế", "76": "Quảng Ngãi",
+                                    "77": "Bình Định", "78": "Phú Yên", "79": "Khánh Hòa", "80": "Gia Lai"
+                                }
+                                
+                                province_name = province_codes.get(plate_number[:2], "")
+                                
+                                # Cập nhật trường tỉnh/thành phố nếu tìm thấy
+                                if province_name and hasattr(main_window, 'province_input'):
+                                    index = main_window.province_input.findText(province_name, Qt.MatchContains)
+                                    if index >= 0:
+                                        main_window.province_input.setCurrentIndex(index)
+                                    else:
+                                        # Nếu không tìm thấy trong danh sách, ghi vào notes
+                                        if hasattr(main_window, 'notes_input'):
+                                            main_window.notes_input.setText(f"Tỉnh: {province_name}")
+
                             if plate_number:
                                 main_window.plate_input.setText(plate_number)
                                 main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
@@ -375,6 +452,40 @@ def detect_license_plate(main_window):
                         # Update the plate input field if not already filled
                         if not main_window.plate_input.text() and plate_number:
                             main_window.plate_input.setText(plate_number)
+                            if plate_number and len(plate_number) >= 2 and plate_number[:2].isdigit():
+                                # Dictionary mã tỉnh
+                                province_codes = {
+                                    "11": "Cao Bằng", "12": "Lạng Sơn", "14": "Quảng Ninh", "15": "Hải Phòng",
+                                    "16": "Hải Phòng", "17": "Thái Bình", "18": "Nam Định", "19": "Phú Thọ",
+                                    "20": "Thái Nguyên", "21": "Yên Bái", "22": "Tuyên Quang", "23": "Hà Giang",
+                                    "24": "Lào Cai", "25": "Lai Châu", "26": "Sơn La", "27": "Điện Biên",
+                                    "28": "Hòa Bình", "29": "Hà Nội", "30": "Hà Nội", "31": "Hà Nội",
+                                    "32": "Hà Nội", "33": "Hà Nội", "34": "Hải Dương", "35": "Ninh Bình",
+                                    "36": "Thanh Hóa", "37": "Nghệ An", "38": "Hà Tĩnh", "43": "Đà Nẵng",
+                                    "47": "Đắk Lắk", "48": "Đắk Nông", "49": "Lâm Đồng", "50": "TPHCM",
+                                    "51": "TPHCM", "52": "TPHCM", "53": "TPHCM", "54": "TPHCM",
+                                    "55": "TPHCM", "56": "TPHCM", "57": "TPHCM", "58": "TPHCM",
+                                    "59": "TPHCM", "60": "Đồng Nai", "61": "Bình Dương", "62": "Long An",
+                                    "63": "Tiền Giang", "64": "Vĩnh Long", "65": "Cần Thơ", "66": "Đồng Tháp",
+                                    "67": "An Giang", "68": "Kiên Giang", "69": "Cà Mau", "70": "Tây Ninh",
+                                    "71": "Bến Tre", "72": "Bà Rịa - Vũng Tàu", "73": "Quảng Bình",
+                                    "74": "Quảng Trị", "75": "Thừa Thiên Huế", "76": "Quảng Ngãi",
+                                    "77": "Bình Định", "78": "Phú Yên", "79": "Khánh Hòa", "80": "Gia Lai"
+                                }
+                                
+                                province_name = province_codes.get(plate_number[:2], "")
+                                
+                                # Cập nhật trường tỉnh/thành phố nếu tìm thấy
+                                if province_name and hasattr(main_window, 'province_input'):
+                                    index = main_window.province_input.findText(province_name, Qt.MatchContains)
+                                    if index >= 0:
+                                        main_window.province_input.setCurrentIndex(index)
+                                    else:
+                                        # Nếu không tìm thấy trong danh sách, ghi vào notes
+                                        if hasattr(main_window, 'notes_input'):
+                                            current_notes = main_window.notes_input.text()
+                                            if not current_notes:
+                                                main_window.notes_input.setText(f"Tỉnh: {province_name}")
                         
                         # Show a success animation
                         setup_animation(main_window.processed_img, "zoom_in")
@@ -413,6 +524,7 @@ def register_vehicle(main_window):
         vehicle_type = main_window.vehicle_type_input.currentText()
         brand = main_window.brand_input.currentText()
         color = main_window.color_input.currentText()
+        province = main_window.province_input.currentText()
         notes = main_window.notes_input.text().strip() if hasattr(main_window, 'notes_input') else ""
         
         # Validate required fields
@@ -443,6 +555,7 @@ def register_vehicle(main_window):
                 vehicle_type=vehicle_type,
                 brand=brand,
                 color=color,
+                province=province,
                 notes=notes
             )
             
