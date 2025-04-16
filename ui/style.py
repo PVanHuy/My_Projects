@@ -405,7 +405,7 @@ def setup_animation(widget, animation_type="fade", duration=500):
         widget._original_size = widget.size()
         
         # Start with a small size
-        widget.resize(widget.width() * 0.8, widget.height() * 0.8)
+        widget.resize(int(widget.width() * 0.8), int(widget.height() * 0.8))
         
         # Create size animation
         size_anim = QPropertyAnimation(widget, b"size")

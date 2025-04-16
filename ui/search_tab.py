@@ -1,15 +1,17 @@
 from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout,
     QGroupBox, QGridLayout, QMessageBox, QGraphicsOpacityEffect,
-    QFrame, QSplitter, QWidget, QFileDialog
+    QFrame, QSplitter, QWidget, QFileDialog, QDialog, QFormLayout,
+    QProgressDialog
 )
 from PyQt5.QtGui import QPixmap, QFont, QColor, QBrush, QPainter, QPen
-from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QSize
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QSize, QDate
 
 from colors.my_colors import MyColor
 from ui.style import setup_animation, create_title_label, create_styled_button
 from utils.app_icons import AppIcons
 from database.db_manager import DatabaseManager
+import logging
 
 def setup_search_tab(tab, window):
     """Set up the search tab with search controls and result display"""
@@ -265,94 +267,265 @@ def setup_search_tab(tab, window):
         vehicle = db.get_vehicle_by_plate(plate)
         
         if vehicle:
-            # Update details with found vehicle data
-            window.owner_value.setText(vehicle["owner"])
-            window.type_value.setText(vehicle["type"])
-            window.brand_value.setText(vehicle.get("brand", "Không có thông tin"))
-            window.phone_value.setText(vehicle["phone"])
-            window.time_value.setText(vehicle["timestamp"])
-            window.notes_value.setText(vehicle.get("notes", "") or "Không có ghi chú")
+            # Tạo dialog hiển thị thông tin xe
+            result_dialog = QDialog(window)
+            result_dialog.setWindowTitle("Thông tin xe")
+            result_dialog.setMinimumWidth(400)
+            result_dialog.setWindowIcon(AppIcons.get_icon("car"))
             
-            # Simulate color preview if color is available
-            if "color" in vehicle and vehicle["color"]:
-                # Map color names to RGB values
-                color_map = {
-                    "Đen": "#000000",
-                    "Trắng": "#FFFFFF",
-                    "Đỏ": "#FF0000",
-                    "Xanh dương": "#0000FF",
-                    "Xanh lá": "#00FF00",
-                    "Vàng": "#FFFF00",
-                    "Bạc": "#C0C0C0",
-                    "Xám": "#808080",
-                    "Nâu": "#A52A2A",
-                    "Cam": "#FFA500",
-                    "Hồng": "#FFC0CB",
-                    "Tím": "#800080"
-                }
+            dialog_layout = QVBoxLayout(result_dialog)
+            
+            # Thông tin chủ xe
+            owner_group = QGroupBox("Thông tin chủ xe")
+            owner_layout = QFormLayout()
+            
+            owner_name = QLineEdit(vehicle.get("owner", ""))
+            owner_name.setReadOnly(True)
+            owner_name.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
+            
+            phone = QLineEdit(vehicle.get("phone", ""))
+            phone.setReadOnly(True)
+            phone.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
+            
+            owner_layout.addRow("Họ tên:", owner_name)
+            owner_layout.addRow("Số điện thoại:", phone)
+            owner_group.setLayout(owner_layout)
+            
+            # Thông tin xe
+            vehicle_group = QGroupBox("Thông tin xe")
+            vehicle_layout = QFormLayout()
+            
+            plate_number = QLineEdit(vehicle.get("plate", ""))
+            plate_number.setReadOnly(True)
+            plate_number.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px; font-weight: bold;")
+            
+            vehicle_type = QLineEdit(vehicle.get("type", ""))
+            vehicle_type.setReadOnly(True)
+            vehicle_type.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
+            
+            brand = QLineEdit(vehicle.get("brand", ""))
+            brand.setReadOnly(True)
+            brand.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
+            
+            color = QLineEdit(vehicle.get("color", ""))
+            color.setReadOnly(True)
+            color.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
+            
+            notes = QLineEdit(vehicle.get("notes", "") or "Không có ghi chú")
+            notes.setReadOnly(True)
+            notes.setStyleSheet("background-color: #f8f8f8; border: 1px solid #ccc; border-radius: 4px; padding: 5px;")
+            
+            vehicle_layout.addRow("Biển số xe:", plate_number)
+            vehicle_layout.addRow("Loại xe:", vehicle_type)
+            vehicle_layout.addRow("Hãng xe:", brand)
+            vehicle_layout.addRow("Màu xe:", color)
+            vehicle_layout.addRow("Ghi chú:", notes)
+            vehicle_group.setLayout(vehicle_layout)
+            
+            # Thêm các group vào layout chính
+            dialog_layout.addWidget(owner_group)
+            dialog_layout.addWidget(vehicle_group)
+            
+            # Nút điều khiển
+            button_layout = QHBoxLayout()
+            
+            # Tạo một phiên bản cục bộ của export_vehicle_info cho dialog này
+            def export_dialog_vehicle_info():
+                # Get export file name and type
+                file_name, _ = QFileDialog.getSaveFileName(
+                    result_dialog, 
+                    "Xuất thông tin xe", 
+                    "", 
+                    "PDF Files (*.pdf);;Text Files (*.txt);;HTML Files (*.html)"
+                )
                 
-                color_value = color_map.get(vehicle["color"], "#CCCCCC")
-                window.color_preview.setStyleSheet(f"""
-                    background-color: {color_value}; 
-                    border: 1px solid {MyColor.GRAY};
-                    border-radius: 4px;
-                """)
-            else:
-                window.color_preview.setStyleSheet(f"""
-                    background-color: {MyColor.LIGHT_GRAY}; 
-                    border: 1px solid {MyColor.GRAY};
-                    border-radius: 4px;
-                """)
-            
-            # Hiển thị ảnh biển số nếu có
-            if "image_path" in vehicle and vehicle["image_path"]:
+                if not file_name:
+                    return
+                    
                 try:
-                    plate_image = QPixmap(vehicle["image_path"])
-                    if not plate_image.isNull():
-                        window.image_label.setPixmap(plate_image.scaled(
-                            320, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-                    else:
-                        # Nếu không tải được ảnh, tạo ảnh giả lập
-                        plate_image = generate_license_plate_image(vehicle["plate"], 320, 180)
-                        window.image_label.setPixmap(plate_image)
-                except:
-                    # Nếu lỗi, tạo ảnh giả lập
-                    plate_image = generate_license_plate_image(vehicle["plate"], 320, 180)
-                    window.image_label.setPixmap(plate_image)
-            else:
-                # Tạo ảnh giả lập nếu không có ảnh thật
-                plate_image = generate_license_plate_image(vehicle["plate"], 320, 180)
-                window.image_label.setPixmap(plate_image)
+                    # Sử dụng thông tin từ các trường trong dialog
+                    if file_name.endswith('.txt'):
+                        with open(file_name, 'w', encoding='utf-8') as f:
+                            f.write("THÔNG TIN XE\n")
+                            f.write("="*50 + "\n\n")
+                            f.write(f"Biển số: {plate_number.text()}\n")
+                            f.write(f"Chủ xe: {owner_name.text()}\n")
+                            f.write(f"Số điện thoại: {phone.text()}\n")
+                            f.write(f"Loại xe: {vehicle_type.text()}\n")
+                            f.write(f"Hãng xe: {brand.text()}\n")
+                            f.write(f"Màu xe: {color.text()}\n")
+                            f.write(f"Thời gian đăng ký: {vehicle.get('timestamp', '')}\n")
+                            f.write(f"Ghi chú: {notes.text()}\n")
+                            
+                        QMessageBox.information(
+                            result_dialog, 
+                            "Xuất thành công", 
+                            f"Đã xuất thông tin xe ra file: {file_name}"
+                        )
+                    elif file_name.endswith('.html'):
+                        # Xuất ra HTML với định dạng đẹp
+                        html_content = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Thông tin xe {plate_number.text()}</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }}
+        .container {{
+            max-width: 800px;
+            margin: 0 auto;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #2E5077;
+            text-align: center;
+            border-bottom: 2px solid #4DA1A9;
+            padding-bottom: 10px;
+        }}
+        .info-group {{
+            margin-bottom: 20px;
+        }}
+        .info-row {{
+            display: flex;
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }}
+        .info-label {{
+            width: 180px;
+            font-weight: bold;
+            color: #2E5077;
+        }}
+        .info-value {{
+            flex: 1;
+        }}
+        .plate-number {{
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 8px;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 30px;
+            font-size: 12px;
+            color: #777;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>THÔNG TIN XE</h1>
+        
+        <div class="plate-number">
+            Biển số: {plate_number.text()}
+        </div>
+        
+        <div class="info-group">
+            <div class="info-row">
+                <div class="info-label">Chủ xe:</div>
+                <div class="info-value">{owner_name.text()}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Số điện thoại:</div>
+                <div class="info-value">{phone.text()}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Loại xe:</div>
+                <div class="info-value">{vehicle_type.text()}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Hãng xe:</div>
+                <div class="info-value">{brand.text()}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Màu xe:</div>
+                <div class="info-value">{color.text()}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Thời gian đăng ký:</div>
+                <div class="info-value">{vehicle.get('timestamp', '')}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Ghi chú:</div>
+                <div class="info-value">{notes.text()}</div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Thông tin được xuất từ Hệ thống Quản lý Đăng ký Xe - {QDate.currentDate().toString("dd/MM/yyyy")}
+        </div>
+    </div>
+</body>
+</html>"""
+                        
+                        with open(file_name, 'w', encoding='utf-8') as f:
+                            f.write(html_content)
+                            
+                        QMessageBox.information(
+                            result_dialog, 
+                            "Xuất thành công", 
+                            f"Đã xuất thông tin xe ra file HTML: {file_name}"
+                        )
+                    elif file_name.endswith('.pdf'):
+                        # Sử dụng VehicleExporter để xuất ra PDF
+                        from database.vehicle_model import export_vehicle_info_to_pdf
+                        
+                        vehicle_info = {
+                            "plate": plate_number.text(),
+                            "owner": owner_name.text(),
+                            "phone": phone.text(),
+                            "type": vehicle_type.text(),
+                            "brand": brand.text(),
+                            "color": color.text(),
+                            "timestamp": vehicle.get('timestamp', ''),
+                            "notes": notes.text()
+                        }
+                        
+                        if export_vehicle_info_to_pdf(vehicle_info, file_name):
+                            QMessageBox.information(
+                                result_dialog, 
+                                "Xuất thành công", 
+                                f"Đã xuất thông tin xe ra file PDF: {file_name}"
+                            )
+                        else:
+                            QMessageBox.warning(
+                                result_dialog, 
+                                "Lỗi", 
+                                "Không thể xuất thông tin ra file PDF. Vui lòng kiểm tra lại cài đặt."
+                            )
+                except Exception as e:
+                    logging.error(f"Error exporting vehicle info: {str(e)}")
+                    QMessageBox.warning(result_dialog, "Lỗi", f"Không thể xuất thông tin: {str(e)}")
             
-            # Animate image display
-            effect = QGraphicsOpacityEffect(window.image_label)
-            window.image_label.setGraphicsEffect(effect)
+            export_btn = create_styled_button("Xuất thông tin", "export", "success")
+            export_btn.clicked.connect(export_dialog_vehicle_info)
             
-            animation = QPropertyAnimation(effect, b"opacity")
-            animation.setDuration(500)
-            animation.setStartValue(0.3)
-            animation.setEndValue(1.0)
-            animation.start()
+            close_btn = create_styled_button("Đóng", "cancel", "danger")
+            close_btn.clicked.connect(result_dialog.reject)
             
-            # Fade in all value widgets
-            for widget in [window.owner_value, window.type_value, window.brand_value, 
-                          window.phone_value, window.time_value, window.notes_value]:
-                effect = widget.graphicsEffect()
-                
-                animation = QPropertyAnimation(effect, b"opacity")
-                animation.setDuration(500)
-                animation.setStartValue(0.3)
-                animation.setEndValue(1.0)
-                animation.start()
-                
+            button_layout.addWidget(export_btn)
+            button_layout.addWidget(close_btn)
+            dialog_layout.addLayout(button_layout)
+            
+            # Hiển thị dialog
+            result_dialog.exec_()
+            
             # Update status bar if available
             if hasattr(window, 'statusBar'):
                 window.statusBar().showMessage(f"Đã tìm thấy xe biển số: {plate} - Chủ xe: {vehicle['owner']}")
         else:
             # No results found
-            reset_values()
-            
-            # Show not found message
             QMessageBox.information(
                 tab, 
                 "Không tìm thấy", 
@@ -416,7 +589,6 @@ def setup_search_tab(tab, window):
             window.statusBar().showMessage("Đang quét ảnh biển số...") if hasattr(window, 'statusBar') else None
             
             # Create a progress dialog to simulate processing
-            from PyQt5.QtWidgets import QProgressDialog
             progress = QProgressDialog("Đang xử lý ảnh biển số...", "Hủy", 0, 100, window)
             progress.setWindowModality(Qt.WindowModal)
             progress.setWindowTitle("Quét biển số")
@@ -507,7 +679,7 @@ def setup_search_tab(tab, window):
             "Thông báo", 
             "Tính năng in thông tin sẽ được phát triển trong phiên bản tiếp theo."
         )
-    
+   
     # Function to be called when tab is activated
     def on_tab_activated():
         """Reset all values when switching to this tab"""
@@ -539,44 +711,44 @@ def setup_search_tab(tab, window):
     print_btn.clicked.connect(print_vehicle_info)
 
 
-def generate_license_plate_image(plate_text, width, height):
-    """Generate a simple rendered license plate image with the given text"""
-    pixmap = QPixmap(width, height)
-    pixmap.fill(QColor(255, 255, 255))  # White background
-    
-    painter = QPainter(pixmap)
-    
-    # Draw license plate background
-    painter.setBrush(QBrush(QColor("#f0f0f0")))  # Light gray background
-    painter.setPen(QPen(QColor("#000000"), 2))  # Black border
-    
-    # Draw rounded rectangle for plate
-    painter.drawRoundedRect(10, 10, width - 20, height - 20, 10, 10)
-    
-    # Draw blue bar on top (like Vietnamese license plates)
-    painter.setBrush(QBrush(QColor("#003399")))  # Blue
-    painter.setPen(Qt.NoPen)
-    painter.drawRect(15, 15, width - 30, 30)
-    
-    # Draw "VIỆT NAM" text in the blue bar
-    painter.setPen(QPen(QColor("#ffffff")))  # White text
-    painter.setFont(QFont("Arial", 12, QFont.Bold))
-    painter.drawText(width // 2 - 40, 35, "VIỆT NAM")
-    
-    # Draw license plate number
-    painter.setPen(QPen(QColor("#000000")))  # Black text
-    painter.setFont(QFont("Arial", 30, QFont.Bold))
-    painter.drawText(width // 2 - painter.fontMetrics().width(plate_text) // 2, height // 2 + 20, plate_text)
-    
-    # Draw some decorative elements
-    painter.setPen(QPen(QColor("#444444"), 1))
-    painter.drawLine(15, height - 40, width - 15, height - 40)
-    
-    # Add some security-like patterns
-    painter.setPen(QPen(QColor("#bbbbbb"), 1, Qt.DashLine))
-    for i in range(5):
-        painter.drawLine(20 + i * 30, height - 30, 40 + i * 30, height - 20)
-    
-    painter.end()
-    
-    return pixmap
+    def generate_license_plate_image(plate_text, width, height):
+        """Generate a simple rendered license plate image with the given text"""
+        pixmap = QPixmap(width, height)
+        pixmap.fill(QColor(255, 255, 255))  # White background
+        
+        painter = QPainter(pixmap)
+        
+        # Draw license plate background
+        painter.setBrush(QBrush(QColor("#f0f0f0")))  # Light gray background
+        painter.setPen(QPen(QColor("#000000"), 2))  # Black border
+        
+        # Draw rounded rectangle for plate
+        painter.drawRoundedRect(10, 10, width - 20, height - 20, 10, 10)
+        
+        # Draw blue bar on top (like Vietnamese license plates)
+        painter.setBrush(QBrush(QColor("#003399")))  # Blue
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(15, 15, width - 30, 30)
+        
+        # Draw "VIỆT NAM" text in the blue bar
+        painter.setPen(QPen(QColor("#ffffff")))  # White text
+        painter.setFont(QFont("Arial", 12, QFont.Bold))
+        painter.drawText(width // 2 - 40, 35, "VIỆT NAM")
+        
+        # Draw license plate number
+        painter.setPen(QPen(QColor("#000000")))  # Black text
+        painter.setFont(QFont("Arial", 30, QFont.Bold))
+        painter.drawText(width // 2 - painter.fontMetrics().width(plate_text) // 2, height // 2 + 20, plate_text)
+        
+        # Draw some decorative elements
+        painter.setPen(QPen(QColor("#444444"), 1))
+        painter.drawLine(15, height - 40, width - 15, height - 40)
+        
+        # Add some security-like patterns
+        painter.setPen(QPen(QColor("#bbbbbb"), 1, Qt.DashLine))
+        for i in range(5):
+            painter.drawLine(20 + i * 30, height - 30, 40 + i * 30, height - 20)
+        
+        painter.end()
+        
+        return pixmap

@@ -1,7 +1,8 @@
 import qtawesome as qta
 from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QIcon, QPixmap, QColor, QPainter
 from colors.my_colors import MyColor
+import logging
 
 class AppIcons:
     """Class that manages application icons using QtAwesome"""
@@ -9,6 +10,10 @@ class AppIcons:
     @staticmethod
     def get_icon(icon_name, color=MyColor.PRIMARY, size=None):
         """Get a QtAwesome icon with specified parameters"""
+        if icon_name is None:
+            # Return empty icon if None is provided
+            return QIcon()
+            
         options = {'color': color}
         if size:
             options['scale_factor'] = size / 16  # Assuming 16px as base size
@@ -54,6 +59,7 @@ class AppIcons:
             'truck': 'fa5s.truck',
             'bus': 'fa5s.bus',
             'app': 'fa5s.id-card',
+            'cancel': 'fa5s.times',
             
             # Theme related icons
             'moon': 'fa5s.moon',
@@ -68,7 +74,8 @@ class AppIcons:
             'file-excel': 'fa5s.file-excel',
             'file-pdf': 'fa5s.file-pdf',
             'file-image': 'fa5s.file-image',
-            'camera-alt': 'fa5s.camera-alt',
+            'file-code': 'fa5s.file-code',
+            'camera-alt': 'fa5s.camera',
             'camera': 'fa5s.camera', 
             'database': 'fa5s.database',
             'server': 'fa5s.server',
@@ -77,8 +84,34 @@ class AppIcons:
             'cloud-download': 'fa5s.cloud-download-alt'
         }
         
-        fa_name = icon_map.get(icon_name.lower(), icon_name)
-        return qta.icon(fa_name, **options)
+        try:
+            # Attempt to use the mapped icon name or the provided name if not in map
+            fa_name = icon_map.get(icon_name.lower(), icon_name)
+            return qta.icon(fa_name, **options)
+        except Exception as e:
+            # Log error and create a fallback icon
+            logging.warning(f"Error creating icon '{icon_name}': {str(e)}")
+            
+            # Create a simple fallback icon
+            return AppIcons._create_fallback_icon(color)
+    
+    @staticmethod
+    def _create_fallback_icon(color=MyColor.PRIMARY):
+        """Create a simple fallback icon when QtAwesome fails"""
+        icon = QIcon()
+        pixmap = QPixmap(64, 64)
+        pixmap.fill(Qt.transparent)
+        
+        # Draw a simple shape as fallback
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawRect(16, 16, 32, 32)
+        painter.end()
+        
+        icon.addPixmap(pixmap)
+        return icon
     
     @staticmethod
     def get_pixmap(icon_name, color=MyColor.PRIMARY, size=QSize(32, 32)):
@@ -92,13 +125,17 @@ class AppIcons:
     @staticmethod
     def create_colored_button_icon(icon_name, normal_color=MyColor.PRIMARY, hover_color=MyColor.ACCENT):
         """Create an icon with normal and hover states for buttons"""
-        normal_icon = AppIcons.get_icon(icon_name, normal_color)
-        hover_icon = AppIcons.get_icon(icon_name, hover_color)
-        
-        icon = QIcon()
-        icon.addPixmap(normal_icon.pixmap(32), QIcon.Normal, QIcon.Off)
-        icon.addPixmap(hover_icon.pixmap(32), QIcon.Active, QIcon.Off)
-        icon.addPixmap(hover_icon.pixmap(32), QIcon.Selected, QIcon.Off)
-        icon.addPixmap(hover_icon.pixmap(32), QIcon.Selected, QIcon.On)
-        
-        return icon
+        try:
+            normal_icon = AppIcons.get_icon(icon_name, normal_color)
+            hover_icon = AppIcons.get_icon(icon_name, hover_color)
+            
+            icon = QIcon()
+            icon.addPixmap(normal_icon.pixmap(32), QIcon.Normal, QIcon.Off)
+            icon.addPixmap(hover_icon.pixmap(32), QIcon.Active, QIcon.Off)
+            icon.addPixmap(hover_icon.pixmap(32), QIcon.Selected, QIcon.Off)
+            icon.addPixmap(hover_icon.pixmap(32), QIcon.Selected, QIcon.On)
+            
+            return icon
+        except Exception as e:
+            logging.warning(f"Error creating colored button icon: {str(e)}")
+            return AppIcons.get_icon(icon_name, normal_color)

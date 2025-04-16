@@ -12,6 +12,10 @@ from ui.style import setup_animation, create_title_label, create_styled_button
 from utils.app_icons import AppIcons
 from utils.plate_recognition import recognize_license_plate, process_license_plate_image
 from database.db_manager import DatabaseManager
+import logging
+
+# Cấu hình logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def setup_register_tab(tab, main_window):
     """Set up the registration tab with form and license plate recognition"""
@@ -277,199 +281,217 @@ def refresh_register_tab_display(main_window):
 
 def upload_image(main_window):
     """Upload an image file for license plate recognition"""
-    file_name, _ = QFileDialog.getOpenFileName(
-        main_window, 
-        "Chọn ảnh biển số", 
-        "", 
-        "Image Files (*.png *.jpg *.jpeg *.bmp)"
-    )
-    
-    if file_name:
-        pixmap = QPixmap(file_name)
-        if not pixmap.isNull():
-            # Create loading effect
-            main_window.original_img.setText("Đang tải ảnh...")
-            
-            # Use timer to add a small delay for better UX
-            def load_image():
-                # Hiển thị ảnh với kích thước phù hợp, giữ nguyên tỷ lệ
-                pixmap_scaled = pixmap.scaled(
-                    main_window.original_img.width() - 20,  # Trừ padding
-                    main_window.original_img.height() - 20, # Trừ padding
-                    Qt.KeepAspectRatio, 
-                    Qt.SmoothTransformation
-                )
-                main_window.original_img.setPixmap(pixmap_scaled)
-                main_window.original_img_path = file_name
+    try:
+        file_name, _ = QFileDialog.getOpenFileName(
+            main_window, 
+            "Chọn ảnh biển số", 
+            "", 
+            "Image Files (*.png *.jpg *.jpeg *.bmp)"
+        )
+        
+        if file_name:
+            pixmap = QPixmap(file_name)
+            if not pixmap.isNull():
+                # Create loading effect
+                main_window.original_img.setText("Đang tải ảnh...")
                 
-                # Try to recognize plate number automatically
-                try:
-                    plate_number = recognize_license_plate(file_name)
-                    if plate_number:
-                        main_window.plate_input.setText(plate_number)
-                        main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
-                        
-                        # Show a notification
-                        QMessageBox.information(
-                            main_window,
-                            "Nhận diện tự động",
-                            f"Đã nhận diện biển số: {plate_number}",
-                            QMessageBox.Ok
+                # Use timer to add a small delay for better UX
+                def load_image():
+                    try:
+                        # Hiển thị ảnh với kích thước phù hợp, giữ nguyên tỷ lệ
+                        pixmap_scaled = pixmap.scaled(
+                            main_window.original_img.width() - 20,  # Trừ padding
+                            main_window.original_img.height() - 20, # Trừ padding
+                            Qt.KeepAspectRatio, 
+                            Qt.SmoothTransformation
                         )
-                except Exception as e:
-                    # Recognition failed but image still loaded
-                    pass
+                        main_window.original_img.setPixmap(pixmap_scaled)
+                        main_window.original_img_path = file_name
+                        
+                        # Try to recognize plate number automatically
+                        try:
+                            plate_number = recognize_license_plate(file_name)
+                            if plate_number:
+                                main_window.plate_input.setText(plate_number)
+                                main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
+                                
+                                # Show a notification
+                                QMessageBox.information(
+                                    main_window,
+                                    "Nhận diện tự động",
+                                    f"Đã nhận diện biển số: {plate_number}",
+                                    QMessageBox.Ok
+                                )
+                        except Exception as e:
+                            logging.error(f"Auto recognition error: {str(e)}")
+                            # Recognition failed but image still loaded
+                            pass
+                        
+                        main_window.original_img.setVisible(True)
+                        main_window.original_img.repaint()
+                    except Exception as e:
+                        logging.error(f"Error loading image: {str(e)}")
+                        QMessageBox.warning(main_window, "Lỗi", f"Không thể tải ảnh: {str(e)}")
                 
-                main_window.original_img.setVisible(True)
-                main_window.original_img.repaint()
-            
-            # Short delay for loading effect
-            QTimer.singleShot(500, load_image)
-        else:
-            QMessageBox.warning(main_window, "Lỗi", "Không thể tải ảnh, vui lòng thử lại.")
+                # Short delay for loading effect
+                QTimer.singleShot(500, load_image)
+            else:
+                QMessageBox.warning(main_window, "Lỗi", "Không thể tải ảnh, vui lòng thử lại.")
+    except Exception as e:
+        logging.error(f"Error in upload_image: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi tải ảnh: {str(e)}")
 
 
 def detect_license_plate(main_window):
     """Process image to detect and recognize license plate"""
-    if hasattr(main_window, 'original_img_path'):
-        # Display loading message
-        main_window.processed_img.setText("Đang xử lý ảnh...")
-        main_window.processed_img.repaint()
-        
-        def process_image():
-            try:
-                processed_img = process_license_plate_image(main_window.original_img_path)
-                if processed_img is not None:
-                    h, w, ch = processed_img.shape
-                    bytes_per_line = ch * w
-                    convert = QImage(processed_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                    pixmap = QPixmap.fromImage(convert)
-                    
-                    # Cải thiện cách hiển thị ảnh kết quả
-                    pixmap_scaled = pixmap.scaled(
-                        main_window.processed_img.width() - 20,  # Trừ padding
-                        main_window.processed_img.height() - 20, # Trừ padding
-                        Qt.KeepAspectRatio, 
-                        Qt.SmoothTransformation
-                    )
-                    main_window.processed_img.setPixmap(pixmap_scaled)
-                    
-                    # Try to recognize the plate number
-                    plate_number = recognize_license_plate(main_window.original_img_path)
-                    main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
-                    
-                    # Update the plate input field if not already filled
-                    if not main_window.plate_input.text() and plate_number:
-                        main_window.plate_input.setText(plate_number)
-                    
-                    # Show a success animation
-                    setup_animation(main_window.processed_img, "zoom_in")
-                    setup_animation(main_window.recognition_result, "slide_right")
-                else:
-                    QMessageBox.warning(main_window, "Lỗi", "Không thể xử lý ảnh, vui lòng thử lại.")
-            except Exception as e:
-                QMessageBox.warning(main_window, "Lỗi", f"Xử lý ảnh thất bại: {str(e)}")
-            
-            main_window.processed_img.setVisible(True)
+    try:
+        if hasattr(main_window, 'original_img_path'):
+            # Display loading message
+            main_window.processed_img.setText("Đang xử lý ảnh...")
             main_window.processed_img.repaint()
-            main_window.recognition_result.setVisible(True)
-            main_window.recognition_result.repaint()
-        
-        # Short delay for processing effect
-        QTimer.singleShot(1000, process_image)
-    else:
-        QMessageBox.warning(
-            main_window, 
-            "Thông báo", 
-            "Vui lòng tải ảnh lên trước khi thực hiện nhận diện."
-        )
+            
+            def process_image():
+                try:
+                    processed_img = process_license_plate_image(main_window.original_img_path)
+                    if processed_img is not None:
+                        h, w, ch = processed_img.shape
+                        bytes_per_line = ch * w
+                        convert = QImage(processed_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                        pixmap = QPixmap.fromImage(convert)
+                        
+                        # Cải thiện cách hiển thị ảnh kết quả
+                        pixmap_scaled = pixmap.scaled(
+                            main_window.processed_img.width() - 20,  # Trừ padding
+                            main_window.processed_img.height() - 20, # Trừ padding
+                            Qt.KeepAspectRatio, 
+                            Qt.SmoothTransformation
+                        )
+                        main_window.processed_img.setPixmap(pixmap_scaled)
+                        
+                        # Try to recognize the plate number
+                        plate_number = recognize_license_plate(main_window.original_img_path)
+                        main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
+                        
+                        # Update the plate input field if not already filled
+                        if not main_window.plate_input.text() and plate_number:
+                            main_window.plate_input.setText(plate_number)
+                        
+                        # Show a success animation
+                        setup_animation(main_window.processed_img, "zoom_in")
+                        setup_animation(main_window.recognition_result, "slide_right")
+                    else:
+                        QMessageBox.warning(main_window, "Lỗi", "Không thể xử lý ảnh, vui lòng thử lại.")
+                except Exception as e:
+                    logging.error(f"Error processing image: {str(e)}")
+                    QMessageBox.warning(main_window, "Lỗi", f"Xử lý ảnh thất bại: {str(e)}")
+                
+                main_window.processed_img.setVisible(True)
+                main_window.processed_img.repaint()
+                main_window.recognition_result.setVisible(True)
+                main_window.recognition_result.repaint()
+            
+            # Short delay for processing effect
+            QTimer.singleShot(1000, process_image)
+        else:
+            QMessageBox.warning(
+                main_window, 
+                "Thông báo", 
+                "Vui lòng tải ảnh lên trước khi thực hiện nhận diện."
+            )
+    except Exception as e:
+        logging.error(f"Error in detect_license_plate: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi nhận diện biển số: {str(e)}")
 
 
 def register_vehicle(main_window):
     """Register a new vehicle with the entered information"""
-    # Get form values
-    owner_name = main_window.owner_name_input.text().strip()
-    owner_phone = main_window.owner_phone_input.text().strip()
-    plate_number = main_window.plate_input.text().strip()
-    vehicle_type = main_window.vehicle_type_input.currentText()
-    brand = main_window.brand_input.currentText()
-    color = main_window.color_input.currentText()
-    notes = main_window.notes_input.text().strip() if hasattr(main_window, 'notes_input') else ""
-    
-    # Validate required fields
-    if not (owner_name and owner_phone and plate_number):
-        QMessageBox.warning(
-            main_window, 
-            "Thông báo", 
-            "Vui lòng điền đầy đủ thông tin bắt buộc (Chủ xe, Số điện thoại, Biển số)!"
-        )
-        return
-    
-    # Simple phone number validation
-    if not owner_phone.isdigit() or len(owner_phone) < 9 or len(owner_phone) > 12:
-        QMessageBox.warning(
-            main_window, 
-            "Lỗi", 
-            "Số điện thoại không hợp lệ. Vui lòng chỉ nhập số và đảm bảo đúng định dạng!"
-        )
-        return
-    
-    # Create new vehicle entry using database
     try:
-        db = DatabaseManager()
-        success, result = db.add_vehicle(
-            plate=plate_number,
-            owner=owner_name,
-            phone=owner_phone,
-            vehicle_type=vehicle_type,
-            brand=brand,
-            color=color,
-            notes=notes
-        )
+        # Get form values
+        owner_name = main_window.owner_name_input.text().strip()
+        owner_phone = main_window.owner_phone_input.text().strip()
+        plate_number = main_window.plate_input.text().strip()
+        vehicle_type = main_window.vehicle_type_input.currentText()
+        brand = main_window.brand_input.currentText()
+        color = main_window.color_input.currentText()
+        notes = main_window.notes_input.text().strip() if hasattr(main_window, 'notes_input') else ""
         
-        if not success:
+        # Validate required fields
+        if not (owner_name and owner_phone and plate_number):
+            QMessageBox.warning(
+                main_window, 
+                "Thông báo", 
+                "Vui lòng điền đầy đủ thông tin bắt buộc (Chủ xe, Số điện thoại, Biển số)!"
+            )
+            return
+        
+        # Simple phone number validation
+        if not owner_phone.isdigit() or len(owner_phone) < 9 or len(owner_phone) > 12:
+            QMessageBox.warning(
+                main_window, 
+                "Lỗi", 
+                "Số điện thoại không hợp lệ. Vui lòng chỉ nhập số và đảm bảo đúng định dạng!"
+            )
+            return
+        
+        # Create new vehicle entry using database
+        try:
+            db = DatabaseManager()
+            success, result = db.add_vehicle(
+                plate=plate_number,
+                owner=owner_name,
+                phone=owner_phone,
+                vehicle_type=vehicle_type,
+                brand=brand,
+                color=color,
+                notes=notes
+            )
+            
+            if not success:
+                QMessageBox.critical(
+                    main_window, 
+                    "Lỗi", 
+                    f"Không thể đăng ký xe: {result}"
+                )
+                return
+                
+            # Lưu ảnh biển số nếu có
+            if hasattr(main_window, 'original_img_path'):
+                db.add_plate_image(plate_number, main_window.original_img_path)
+            
+            # Làm mới danh sách xe ở list tab
+            from ui.list_tab import refresh_vehicle_list
+            refresh_vehicle_list(main_window)
+            
+            # Clear form for next entry
+            clear_register_form(main_window)
+            
+            # Show success message
+            msg = QMessageBox(main_window)
+            msg.setIcon(QMessageBox.Information)
+            msg.setWindowTitle("Thành công")
+            msg.setText(f"Đăng ký xe mới thành công!")
+            msg.setInformativeText(f"Biển số: {plate_number}\nChủ xe: {owner_name}")
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.setStyleSheet(f"QLabel{{min-width: 300px; color: {MyColor.PRIMARY};}}")
+            
+            # Add option to go to list tab
+            view_list_btn = msg.addButton("Xem danh sách", QMessageBox.ActionRole)
+            
+            result = msg.exec_()
+            
+            # Switch to list tab if requested
+            if msg.clickedButton() == view_list_btn and hasattr(main_window, 'tab_widget'):
+                main_window.tab_widget.setCurrentIndex(1)  # Switch to list tab
+                
+        except Exception as e:
             QMessageBox.critical(
                 main_window, 
                 "Lỗi", 
-                f"Không thể đăng ký xe: {result}"
+                f"Không thể đăng ký xe: {str(e)}"
             )
-            return
-            
-        # Lưu ảnh biển số nếu có
-        if hasattr(main_window, 'original_img_path'):
-            db.add_plate_image(plate_number, main_window.original_img_path)
-        
-        # Làm mới danh sách xe ở list tab
-        from ui.list_tab import refresh_vehicle_list
-        refresh_vehicle_list(main_window)
-        
-        # Clear form for next entry
-        clear_register_form(main_window)
-        
-        # Show success message
-        msg = QMessageBox(main_window)
-        msg.setIcon(QMessageBox.Information)
-        msg.setWindowTitle("Thành công")
-        msg.setText(f"Đăng ký xe mới thành công!")
-        msg.setInformativeText(f"Biển số: {plate_number}\nChủ xe: {owner_name}")
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.setStyleSheet(f"QLabel{{min-width: 300px; color: {MyColor.PRIMARY};}}")
-        
-        # Add option to go to list tab
-        view_list_btn = msg.addButton("Xem danh sách", QMessageBox.ActionRole)
-        
-        result = msg.exec_()
-        
-        # Switch to list tab if requested
-        if msg.clickedButton() == view_list_btn and hasattr(main_window, 'tab_widget'):
-            main_window.tab_widget.setCurrentIndex(1)  # Switch to list tab
-            
     except Exception as e:
-        QMessageBox.critical(
-            main_window, 
-            "Lỗi", 
-            f"Không thể đăng ký xe: {str(e)}"
-        )
+        logging.error(f"Error in register_vehicle: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi đăng ký xe: {str(e)}")
 
 
 def clear_register_form(main_window):

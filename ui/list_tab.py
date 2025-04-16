@@ -12,8 +12,147 @@ from colors.my_colors import MyColor
 from ui.style import apply_stylesheet, setup_animation, create_title_label, create_styled_button
 from utils.app_icons import AppIcons
 from database.db_manager import DatabaseManager
+import logging
 
-
+# Cấu hình logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+def edit_selected_vehicle(main_window):
+    """Edit the selected vehicle's information"""
+    try:
+        selected_row = main_window.vehicle_table.currentRow()
+        if selected_row >= 0:
+            # Get the plate number of the selected row
+            plate = main_window.vehicle_table.item(selected_row, 1).text()
+            
+            # Fetch current vehicle data
+            db = DatabaseManager()
+            vehicle = db.get_vehicle_by_plate(plate)
+            
+            if not vehicle:
+                QMessageBox.warning(
+                    main_window,
+                    "Lỗi",
+                    "Không thể tìm thấy thông tin xe này."
+                )
+                return
+            
+            # Create edit dialog
+            dialog = QDialog(main_window)
+            dialog.setWindowTitle("Sửa thông tin xe")
+            dialog.setMinimumWidth(400)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Owner info
+            owner_group = QGroupBox("Thông tin chủ xe")
+            owner_form = QFormLayout()
+            
+            owner_name_input = QLineEdit()
+            owner_name_input.setText(vehicle.get("owner", ""))
+            
+            owner_phone_input = QLineEdit()
+            owner_phone_input.setText(vehicle.get("phone", ""))
+            
+            owner_form.addRow("Họ tên:", owner_name_input)
+            owner_form.addRow("Số điện thoại:", owner_phone_input)
+            owner_group.setLayout(owner_form)
+            
+            # Vehicle info
+            vehicle_group = QGroupBox("Thông tin xe")
+            vehicle_form = QFormLayout()
+            
+            # Display plate number (read-only)
+            plate_input = QLineEdit()
+            plate_input.setText(vehicle.get("plate", ""))
+            plate_input.setReadOnly(True)
+            plate_input.setEnabled(False)
+            
+            vehicle_type_input = QComboBox()
+            vehicle_type_input.addItems(["Sedan", "SUV", "Hatchback", "Xe máy", "Khác"])
+            # Set current type
+            index = vehicle_type_input.findText(vehicle.get("type", ""))
+            if index >= 0:
+                vehicle_type_input.setCurrentIndex(index)
+            
+            brand_input = QComboBox()
+            brand_input.addItems(["Toyota", "Honda", "Mazda", "Hyundai", "Kia", "Ford", "Khác"])
+            brand_input.setEditable(True)
+            # Set current brand
+            brand_input.setCurrentText(vehicle.get("brand", ""))
+            
+            color_input = QLineEdit()
+            color_input.setText(vehicle.get("color", ""))
+            
+            notes_input = QLineEdit()
+            notes_input.setText(vehicle.get("notes", ""))
+            
+            vehicle_form.addRow("Biển số xe:", plate_input)
+            vehicle_form.addRow("Loại xe:", vehicle_type_input)
+            vehicle_form.addRow("Hãng xe:", brand_input)
+            vehicle_form.addRow("Màu xe:", color_input)
+            vehicle_form.addRow("Ghi chú:", notes_input)
+            vehicle_group.setLayout(vehicle_form)
+            
+            # Add to layout
+            layout.addWidget(owner_group)
+            layout.addWidget(vehicle_group)
+            
+            # Buttons
+            buttons_layout = QHBoxLayout()
+            
+            save_btn = create_styled_button("Lưu thay đổi", "save", "success")
+            cancel_btn = create_styled_button("Hủy", "cancel", "danger")
+            
+            buttons_layout.addWidget(save_btn)
+            buttons_layout.addWidget(cancel_btn)
+            layout.addLayout(buttons_layout)
+            
+            # Handle save
+            def save_changes():
+                # Validate
+                if not (owner_name_input.text() and owner_phone_input.text()):
+                    QMessageBox.warning(dialog, "Lỗi", "Vui lòng điền đầy đủ thông tin bắt buộc!")
+                    return
+                
+                # Update vehicle info
+                try:
+                    updates = {
+                        'owner': owner_name_input.text(),
+                        'phone': owner_phone_input.text(),
+                        'vehicle_type': vehicle_type_input.currentText(),
+                        'brand': brand_input.currentText(),
+                        'color': color_input.text(),
+                        'notes': notes_input.text()
+                    }
+                    
+                    success, result = db.update_vehicle(plate, **updates)
+                    
+                    if success:
+                        # Refresh the list
+                        refresh_vehicle_list(main_window)
+                        
+                        QMessageBox.information(dialog, "Thành công", "Đã cập nhật thông tin xe thành công!")
+                        dialog.accept()
+                    else:
+                        QMessageBox.critical(dialog, "Lỗi", f"Không thể cập nhật thông tin xe: {result}")
+                    
+                except Exception as e:
+                    QMessageBox.critical(dialog, "Lỗi", f"Không thể cập nhật thông tin xe: {str(e)}")
+            
+            # Connect buttons
+            save_btn.clicked.connect(save_changes)
+            cancel_btn.clicked.connect(dialog.reject)
+            
+            dialog.exec_()
+        else:
+            QMessageBox.warning(
+                main_window,
+                "Lỗi",
+                "Vui lòng chọn xe cần sửa trong danh sách."
+            )
+    except Exception as e:
+        logging.error(f"Error in edit_selected_vehicle: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi sửa thông tin xe: {str(e)}")
 def setup_list_tab(tab, main_window):
     """Set up the list tab with table and controls"""
     layout = QVBoxLayout(tab)
@@ -138,15 +277,20 @@ def setup_list_tab(tab, main_window):
     add_btn = create_styled_button("Thêm xe mới", "add", "primary")
     add_btn.clicked.connect(lambda: add_new_vehicle_dialog(main_window))
 
+    # Edit button - new functionality
+    edit_btn = create_styled_button("Sửa thông tin", "edit", "primary")
+    edit_btn.clicked.connect(lambda: edit_selected_vehicle(main_window))
+
     # Delete button
     delete_btn = create_styled_button("Xóa xe đã chọn", "delete", "danger")
     delete_btn.setObjectName("deleteButton")
     delete_btn.clicked.connect(lambda: delete_selected_vehicle(main_window))
-
+    
     # Add buttons to layout
     button_layout.addWidget(refresh_btn)
     button_layout.addWidget(export_btn)
     button_layout.addWidget(add_btn)
+    button_layout.addWidget(edit_btn)
     button_layout.addWidget(delete_btn)
     layout.addLayout(button_layout)
 
@@ -155,17 +299,17 @@ def setup_list_tab(tab, main_window):
     
     # Connect search input to filter
     search_input.textChanged.connect(lambda text: filter_vehicle_list(main_window, 
-                                                                      search_text=text,
-                                                                      vehicle_type=type_combo.currentText(), 
-                                                                      brand=brand_combo.currentText(),
-                                                                      date=date_filter.date() if date_check.isChecked() else None))
+                                                                     search_text=text,
+                                                                     vehicle_type=type_combo.currentText(), 
+                                                                     brand=brand_combo.currentText(),
+                                                                     date=date_filter.date() if date_check.isChecked() else None))
     
     # Connect filters to filter function
     filter_btn.clicked.connect(lambda: filter_vehicle_list(main_window, 
-                                                          search_text=search_input.text(),
-                                                          vehicle_type=type_combo.currentText(), 
-                                                          brand=brand_combo.currentText(),
-                                                          date=date_filter.date() if date_check.isChecked() else None))
+                                                         search_text=search_input.text(),
+                                                         vehicle_type=type_combo.currentText(), 
+                                                         brand=brand_combo.currentText(),
+                                                         date=date_filter.date() if date_check.isChecked() else None))
     
     # Store filter widgets for reference
     main_window.list_tab_filters = {
@@ -179,327 +323,378 @@ def setup_list_tab(tab, main_window):
 
 def refresh_vehicle_list(main_window):
     """Refresh the vehicle list table with current data"""
-    table = main_window.vehicle_table
-    table.setRowCount(0)
+    try:
+        table = main_window.vehicle_table
+        table.setRowCount(0)
 
-    # Lấy dữ liệu từ database
-    db = DatabaseManager()
-    vehicles = db.search_vehicles()
-    
-    # Cập nhật vehicle_data để tương thích với code hiện tại
-    main_window.vehicle_data = vehicles
+        # Lấy dữ liệu từ database
+        db = DatabaseManager()
+        vehicles = db.search_vehicles()
+        
+        # Cập nhật vehicle_data để tương thích với code hiện tại
+        main_window.vehicle_data = vehicles
 
-    for i, vehicle in enumerate(vehicles):
-        row_position = table.rowCount()
-        table.insertRow(row_position)
+        for i, vehicle in enumerate(vehicles):
+            row_position = table.rowCount()
+            table.insertRow(row_position)
 
-        index_item = QTableWidgetItem(str(i + 1))
-        index_item.setTextAlignment(Qt.AlignCenter)
+            index_item = QTableWidgetItem(str(i + 1))
+            index_item.setTextAlignment(Qt.AlignCenter)
 
-        plate_item = QTableWidgetItem(vehicle["plate"])
-        plate_item.setFont(QFont("Arial", 10, QFont.Bold))
+            plate_item = QTableWidgetItem(vehicle["plate"])
+            plate_item.setFont(QFont("Arial", 10, QFont.Bold))
 
-        owner_item = QTableWidgetItem(vehicle["owner"])
-        phone_item = QTableWidgetItem(vehicle["phone"])
-        type_item = QTableWidgetItem(vehicle["type"])
-        brand_item = QTableWidgetItem(vehicle["brand"])
-        date_item = QTableWidgetItem(vehicle["timestamp"])
+            owner_item = QTableWidgetItem(vehicle["owner"])
+            phone_item = QTableWidgetItem(vehicle["phone"])
+            type_item = QTableWidgetItem(vehicle["type"])
+            brand_item = QTableWidgetItem(vehicle["brand"])
+            date_item = QTableWidgetItem(vehicle["timestamp"])
 
-        if i % 2 == 0:
-            row_color = QBrush(QColor(MyColor.BACKGROUND))
-        else:
-            row_color = QBrush(QColor(MyColor.WHITE))
+            if i % 2 == 0:
+                row_color = QBrush(QColor(MyColor.BACKGROUND))
+            else:
+                row_color = QBrush(QColor(MyColor.WHITE))
 
-        for col, item in enumerate([index_item, plate_item, owner_item,
-                                    phone_item, type_item, brand_item, date_item]):
-            item.setBackground(row_color)
-            table.setItem(row_position, col, item)
-    
-    # Refresh status information
-    if hasattr(main_window, 'statusBar'):
-        main_window.statusBar().showMessage(f"Tổng số xe đã đăng ký: {len(vehicles)}")
+            for col, item in enumerate([index_item, plate_item, owner_item,
+                                        phone_item, type_item, brand_item, date_item]):
+                item.setBackground(row_color)
+                table.setItem(row_position, col, item)
+        
+        # Refresh status information
+        if hasattr(main_window, 'statusBar'):
+            main_window.statusBar().showMessage(f"Tổng số xe đã đăng ký: {len(vehicles)}")
+    except Exception as e:
+        logging.error(f"Error refreshing vehicle list: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Không thể tải danh sách xe: {str(e)}")
 
 
 def filter_vehicle_list(main_window, search_text="", vehicle_type="Tất cả", brand="Tất cả", date=None):
     """Filter the vehicle list based on search criteria"""
-    table = main_window.vehicle_table
-    table.setRowCount(0)
-    
-    # Sử dụng database manager để lọc dữ liệu
-    db = DatabaseManager()
-    
-    # Chuyển đổi định dạng ngày nếu cần
-    date_str = None
-    if date:
-        date_str = date.toString("yyyy-MM-dd")
-    
-    # Lấy dữ liệu đã lọc từ database
-    filtered_vehicles = db.search_vehicles(
-        search_text=search_text if search_text else None,
-        vehicle_type=vehicle_type if vehicle_type != "Tất cả" else None,
-        brand=brand if brand != "Tất cả" else None,
-        date=date_str
-    )
-    
-    # Hiển thị kết quả
-    for i, vehicle in enumerate(filtered_vehicles):
-        row_position = table.rowCount()
-        table.insertRow(row_position)
+    try:
+        table = main_window.vehicle_table
+        table.setRowCount(0)
         
-        index_item = QTableWidgetItem(str(i + 1))
-        index_item.setTextAlignment(Qt.AlignCenter)
+        # Sử dụng database manager để lọc dữ liệu
+        db = DatabaseManager()
         
-        plate_item = QTableWidgetItem(vehicle["plate"])
-        plate_item.setFont(QFont("Arial", 10, QFont.Bold))
+        # Chuyển đổi định dạng ngày nếu cần
+        date_str = None
+        if date:
+            date_str = date.toString("yyyy-MM-dd")
         
-        owner_item = QTableWidgetItem(vehicle["owner"])
-        phone_item = QTableWidgetItem(vehicle["phone"])
-        type_item = QTableWidgetItem(vehicle["type"])
-        brand_item = QTableWidgetItem(vehicle["brand"])
-        date_item = QTableWidgetItem(vehicle["timestamp"])
+        # Lấy dữ liệu đã lọc từ database
+        filtered_vehicles = db.search_vehicles(
+            search_text=search_text if search_text else None,
+            vehicle_type=vehicle_type if vehicle_type != "Tất cả" else None,
+            brand=brand if brand != "Tất cả" else None,
+            date=date_str
+        )
         
-        if i % 2 == 0:
-            row_color = QBrush(QColor(MyColor.BACKGROUND))
-        else:
-            row_color = QBrush(QColor(MyColor.WHITE))
+        # Hiển thị kết quả
+        for i, vehicle in enumerate(filtered_vehicles):
+            row_position = table.rowCount()
+            table.insertRow(row_position)
+            
+            index_item = QTableWidgetItem(str(i + 1))
+            index_item.setTextAlignment(Qt.AlignCenter)
+            
+            plate_item = QTableWidgetItem(vehicle["plate"])
+            plate_item.setFont(QFont("Arial", 10, QFont.Bold))
+            
+            owner_item = QTableWidgetItem(vehicle["owner"])
+            phone_item = QTableWidgetItem(vehicle["phone"])
+            type_item = QTableWidgetItem(vehicle["type"])
+            brand_item = QTableWidgetItem(vehicle["brand"])
+            date_item = QTableWidgetItem(vehicle["timestamp"])
+            
+            if i % 2 == 0:
+                row_color = QBrush(QColor(MyColor.BACKGROUND))
+            else:
+                row_color = QBrush(QColor(MyColor.WHITE))
+            
+            for col, item in enumerate([index_item, plate_item, owner_item,
+                                        phone_item, type_item, brand_item, date_item]):
+                item.setBackground(row_color)
+                table.setItem(row_position, col, item)
         
-        for col, item in enumerate([index_item, plate_item, owner_item,
-                                    phone_item, type_item, brand_item, date_item]):
-            item.setBackground(row_color)
-            table.setItem(row_position, col, item)
-    
-    # Lấy tổng số xe để hiển thị thống kê
-    all_vehicles_count = len(db.search_vehicles())
-    
-    # Update status bar with filter information
-    if hasattr(main_window, 'statusBar'):
-        main_window.statusBar().showMessage(f"Hiển thị {len(filtered_vehicles)} trên tổng số {all_vehicles_count} xe đã đăng ký")
+        # Lấy tổng số xe để hiển thị thống kê
+        all_vehicles_count = len(db.search_vehicles())
+        
+        # Update status bar with filter information
+        if hasattr(main_window, 'statusBar'):
+            main_window.statusBar().showMessage(f"Hiển thị {len(filtered_vehicles)} trên tổng số {all_vehicles_count} xe đã đăng ký")
+    except Exception as e:
+        logging.error(f"Error filtering vehicle list: {str(e)}")
+        QMessageBox.warning(main_window, "Lỗi", f"Không thể lọc dữ liệu: {str(e)}")
 
 
 def delete_selected_vehicle(main_window):
     """Delete the selected vehicle from the list"""
-    selected_row = main_window.vehicle_table.currentRow()
-    if selected_row >= 0:
-        # Get the plate number for confirmation
-        plate = main_window.vehicle_table.item(selected_row, 1).text()
-        
-        # Confirm deletion
-        confirm = QMessageBox.question(
-            main_window,
-            "Xác nhận xóa",
-            f"Bạn có chắc chắn muốn xóa xe có biển số '{plate}'?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if confirm == QMessageBox.Yes:
-            # Sử dụng database manager để xóa xe
-            db = DatabaseManager()
-            success, message = db.delete_vehicle(plate)
+    try:
+        selected_row = main_window.vehicle_table.currentRow()
+        if selected_row >= 0:
+            # Get the plate number for confirmation
+            plate = main_window.vehicle_table.item(selected_row, 1).text()
             
-            if success:
-                # Refresh the list
-                refresh_vehicle_list(main_window)
+            # Confirm deletion
+            confirm = QMessageBox.question(
+                main_window,
+                "Xác nhận xóa",
+                f"Bạn có chắc chắn muốn xóa xe có biển số '{plate}'?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if confirm == QMessageBox.Yes:
+                # Sử dụng database manager để xóa xe
+                db = DatabaseManager()
+                success, message = db.delete_vehicle(plate)
                 
-                QMessageBox.information(
-                    main_window,
-                    "Xóa thành công",
-                    f"Đã xóa xe có biển số '{plate}' khỏi danh sách."
-                )
-            else:
-                QMessageBox.warning(
-                    main_window,
-                    "Lỗi xóa",
-                    f"Không thể xóa xe: {message}"
-                )
-    else:
-        QMessageBox.warning(
-            main_window,
-            "Lỗi",
-            "Vui lòng chọn xe cần xóa trong danh sách."
-        )
+                if success:
+                    # Refresh the list
+                    refresh_vehicle_list(main_window)
+                    
+                    QMessageBox.information(
+                        main_window,
+                        "Xóa thành công",
+                        f"Đã xóa xe có biển số '{plate}' khỏi danh sách."
+                    )
+                else:
+                    QMessageBox.warning(
+                        main_window,
+                        "Lỗi xóa",
+                        f"Không thể xóa xe: {message}"
+                    )
+        else:
+            QMessageBox.warning(
+                main_window,
+                "Lỗi",
+                "Vui lòng chọn xe cần xóa trong danh sách."
+            )
+    except Exception as e:
+        logging.error(f"Error in delete_selected_vehicle: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi xóa xe: {str(e)}")
 
 
 def export_vehicle_list(main_window):
     """Export the vehicle list to a CSV or Excel file"""
-    # Ask for file format
-    format_dialog = QDialog(main_window)
-    format_dialog.setWindowTitle("Chọn định dạng xuất")
-    format_dialog.setMinimumWidth(300)
-    
-    format_layout = QVBoxLayout(format_dialog)
-    format_layout.addWidget(QLabel("Chọn định dạng file:"))
-    
-    csv_btn = QPushButton("CSV (.csv)")
-    csv_btn.setIcon(AppIcons.get_icon("file-csv", MyColor.INFO))
-    
-    excel_btn = QPushButton("Excel (.xlsx)")
-    excel_btn.setIcon(AppIcons.get_icon("file-excel", MyColor.SUCCESS))
-    
-    format_layout.addWidget(csv_btn)
-    format_layout.addWidget(excel_btn)
-    
-    # Function to export as CSV
-    def export_as_csv():
-        format_dialog.close()
-        filename, _ = QFileDialog.getSaveFileName(
-            main_window, 
-            "Lưu danh sách xe", 
-            "", 
-            "CSV files (*.csv)"
-        )
-        if filename:
-            # Sử dụng database manager để xuất dữ liệu
-            from database.vehicle_model import export_to_csv
-            
-            if export_to_csv(main_window.vehicle_data, filename):
-                QMessageBox.information(
-                    main_window,
-                    "Xuất thành công",
-                    f"Đã xuất danh sách xe ra file CSV: {filename}"
-                )
-            else:
-                QMessageBox.warning(
-                    main_window,
-                    "Lỗi",
-                    "Không thể xuất dữ liệu ra file CSV."
-                )
-    
-    # Function to export as Excel
-    def export_as_excel():
-        format_dialog.close()
+    try:
+        # Ask for file format
+        format_dialog = QDialog(main_window)
+        format_dialog.setWindowTitle("Chọn định dạng xuất")
+        format_dialog.setMinimumWidth(300)
         
-        filename, _ = QFileDialog.getSaveFileName(
-            main_window, 
-            "Lưu danh sách xe", 
-            "", 
-            "Excel files (*.xlsx)"
-        )
+        format_layout = QVBoxLayout(format_dialog)
+        format_layout.addWidget(QLabel("Chọn định dạng file:"))
         
-        if filename:
-            # Sử dụng database manager để xuất dữ liệu
-            from database.vehicle_model import export_to_excel
+        csv_btn = QPushButton("CSV (.csv)")
+        csv_btn.setIcon(AppIcons.get_icon("file-csv", MyColor.INFO))
+        
+        excel_btn = QPushButton("Excel (.xlsx)")
+        excel_btn.setIcon(AppIcons.get_icon("file-excel", MyColor.SUCCESS))
+        
+        html_btn = QPushButton("HTML (.html)")
+        html_btn.setIcon(AppIcons.get_icon("file-code", MyColor.PRIMARY))
+        
+        format_layout.addWidget(csv_btn)
+        format_layout.addWidget(excel_btn)
+        format_layout.addWidget(html_btn)
+        
+        # Function to export as CSV
+        def export_as_csv():
+            format_dialog.close()
+            filename, _ = QFileDialog.getSaveFileName(
+                main_window, 
+                "Lưu danh sách xe", 
+                "", 
+                "CSV files (*.csv)"
+            )
+            if filename:
+                # Sử dụng database manager để xuất dữ liệu
+                from database.vehicle_model import export_to_csv
+                
+                if export_to_csv(main_window.vehicle_data, filename):
+                    QMessageBox.information(
+                        main_window,
+                        "Xuất thành công",
+                        f"Đã xuất danh sách xe ra file CSV: {filename}"
+                    )
+                else:
+                    QMessageBox.warning(
+                        main_window,
+                        "Lỗi",
+                        "Không thể xuất dữ liệu ra file CSV."
+                    )
+        
+        # Function to export as Excel
+        def export_as_excel():
+            format_dialog.close()
             
-            if export_to_excel(main_window.vehicle_data, filename):
-                QMessageBox.information(
-                    main_window,
-                    "Xuất thành công",
-                    f"Đã xuất danh sách xe ra file Excel: {filename}"
-                )
-            else:
-                QMessageBox.warning(
-                    main_window,
-                    "Lỗi",
-                    "Không thể xuất dữ liệu ra file Excel."
-                )
-    
-    # Connect buttons to export functions
-    csv_btn.clicked.connect(export_as_csv)
-    excel_btn.clicked.connect(export_as_excel)
-    
-    format_dialog.exec_()
+            filename, _ = QFileDialog.getSaveFileName(
+                main_window, 
+                "Lưu danh sách xe", 
+                "", 
+                "Excel files (*.xlsx)"
+            )
+            
+            if filename:
+                # Sử dụng database manager để xuất dữ liệu
+                from database.vehicle_model import export_to_excel
+                
+                if export_to_excel(main_window.vehicle_data, filename):
+                    QMessageBox.information(
+                        main_window,
+                        "Xuất thành công",
+                        f"Đã xuất danh sách xe ra file Excel: {filename}"
+                    )
+                else:
+                    QMessageBox.warning(
+                        main_window,
+                        "Lỗi",
+                        "Không thể xuất dữ liệu ra file Excel."
+                    )
+        
+        # Function to export as HTML
+        def export_as_html():
+            format_dialog.close()
+            
+            filename, _ = QFileDialog.getSaveFileName(
+                main_window, 
+                "Lưu danh sách xe", 
+                "", 
+                "HTML files (*.html)"
+            )
+            
+            if filename:
+                # Sử dụng database manager để xuất dữ liệu
+                from database.vehicle_model import export_to_html
+                
+                if export_to_html(main_window.vehicle_data, filename):
+                    QMessageBox.information(
+                        main_window,
+                        "Xuất thành công",
+                        f"Đã xuất danh sách xe ra file HTML: {filename}"
+                    )
+                else:
+                    QMessageBox.warning(
+                        main_window,
+                        "Lỗi",
+                        "Không thể xuất dữ liệu ra file HTML."
+                    )
+        
+        # Connect buttons to export functions
+        csv_btn.clicked.connect(export_as_csv)
+        excel_btn.clicked.connect(export_as_excel)
+        html_btn.clicked.connect(export_as_html)
+        
+        format_dialog.exec_()
+    except Exception as e:
+        logging.error(f"Error in export_vehicle_list: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi xuất danh sách: {str(e)}")
 
 
 def add_new_vehicle_dialog(main_window):
     """Show dialog to add a new vehicle directly from the list tab"""
-    dialog = QDialog(main_window)
-    dialog.setWindowTitle("Thêm xe mới")
-    dialog.setMinimumWidth(400)
-    
-    layout = QVBoxLayout(dialog)
-    
-    # Owner info
-    owner_group = QGroupBox("Thông tin chủ xe")
-    owner_form = QFormLayout()
-    
-    owner_name_input = QLineEdit()
-    owner_name_input.setPlaceholderText("Nhập họ tên chủ xe")
-    
-    owner_phone_input = QLineEdit()
-    owner_phone_input.setPlaceholderText("Nhập số điện thoại")
-    
-    owner_form.addRow("Họ tên:", owner_name_input)
-    owner_form.addRow("Số điện thoại:", owner_phone_input)
-    owner_group.setLayout(owner_form)
-    
-    # Vehicle info
-    vehicle_group = QGroupBox("Thông tin xe")
-    vehicle_form = QFormLayout()
-    
-    plate_input = QLineEdit()
-    plate_input.setPlaceholderText("Nhập biển số xe")
-    
-    vehicle_type_input = QComboBox()
-    vehicle_type_input.addItems(["Sedan", "SUV", "Hatchback", "Xe máy", "Khác"])
-    
-    brand_input = QComboBox()
-    brand_input.addItems(["Toyota", "Honda", "Mazda", "Hyundai", "Kia", "Ford", "Khác"])
-    brand_input.setEditable(True)
-    
-    color_input = QLineEdit()
-    color_input.setPlaceholderText("Nhập màu xe")
-    
-    notes_input = QLineEdit()
-    notes_input.setPlaceholderText("Ghi chú (không bắt buộc)")
-    
-    vehicle_form.addRow("Biển số xe:", plate_input)
-    vehicle_form.addRow("Loại xe:", vehicle_type_input)
-    vehicle_form.addRow("Hãng xe:", brand_input)
-    vehicle_form.addRow("Màu xe:", color_input)
-    vehicle_form.addRow("Ghi chú:", notes_input)
-    vehicle_group.setLayout(vehicle_form)
-    
-    # Add to layout
-    layout.addWidget(owner_group)
-    layout.addWidget(vehicle_group)
-    
-    # Buttons
-    buttons_layout = QHBoxLayout()
-    
-    save_btn = create_styled_button("Lưu", "save", "success")
-    cancel_btn = create_styled_button("Hủy", "cancel", "danger")
-    
-    buttons_layout.addWidget(save_btn)
-    buttons_layout.addWidget(cancel_btn)
-    layout.addLayout(buttons_layout)
-    
-    # Handle save
-    def save_vehicle():
-        # Validate
-        if not (owner_name_input.text() and owner_phone_input.text() and plate_input.text()):
-            QMessageBox.warning(dialog, "Lỗi", "Vui lòng điền đầy đủ thông tin bắt buộc!")
-            return
+    try:
+        dialog = QDialog(main_window)
+        dialog.setWindowTitle("Thêm xe mới")
+        dialog.setMinimumWidth(400)
         
-        # Create new vehicle entry
-        from database.db_manager import DatabaseManager
+        layout = QVBoxLayout(dialog)
         
-        try:
-            # Sử dụng database manager để thêm xe
-            db = DatabaseManager()
-            success, result = db.add_vehicle(
-                plate=plate_input.text(),
-                owner=owner_name_input.text(),
-                phone=owner_phone_input.text(),
-                vehicle_type=vehicle_type_input.currentText(),
-                brand=brand_input.currentText(),
-                color=color_input.text(),
-                notes=notes_input.text()
-            )
+        # Owner info
+        owner_group = QGroupBox("Thông tin chủ xe")
+        owner_form = QFormLayout()
+        
+        owner_name_input = QLineEdit()
+        owner_name_input.setPlaceholderText("Nhập họ tên chủ xe")
+        
+        owner_phone_input = QLineEdit()
+        owner_phone_input.setPlaceholderText("Nhập số điện thoại")
+        
+        owner_form.addRow("Họ tên:", owner_name_input)
+        owner_form.addRow("Số điện thoại:", owner_phone_input)
+        owner_group.setLayout(owner_form)
+        
+        # Vehicle info
+        vehicle_group = QGroupBox("Thông tin xe")
+        vehicle_form = QFormLayout()
+        
+        plate_input = QLineEdit()
+        plate_input.setPlaceholderText("Nhập biển số xe")
+        
+        vehicle_type_input = QComboBox()
+        vehicle_type_input.addItems(["Sedan", "SUV", "Hatchback", "Xe máy", "Khác"])
+        
+        brand_input = QComboBox()
+        brand_input.addItems(["Toyota", "Honda", "Mazda", "Hyundai", "Kia", "Ford", "Khác"])
+        brand_input.setEditable(True)
+        
+        color_input = QLineEdit()
+        color_input.setPlaceholderText("Nhập màu xe")
+        
+        notes_input = QLineEdit()
+        notes_input.setPlaceholderText("Ghi chú (không bắt buộc)")
+        
+        vehicle_form.addRow("Biển số xe:", plate_input)
+        vehicle_form.addRow("Loại xe:", vehicle_type_input)
+        vehicle_form.addRow("Hãng xe:", brand_input)
+        vehicle_form.addRow("Màu xe:", color_input)
+        vehicle_form.addRow("Ghi chú:", notes_input)
+        vehicle_group.setLayout(vehicle_form)
+        
+        # Add to layout
+        layout.addWidget(owner_group)
+        layout.addWidget(vehicle_group)
+        
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        
+        save_btn = create_styled_button("Lưu", "save", "success")
+        cancel_btn = create_styled_button("Hủy", "cancel", "danger")
+        
+        buttons_layout.addWidget(save_btn)
+        buttons_layout.addWidget(cancel_btn)
+        layout.addLayout(buttons_layout)
+        
+        # Handle save
+        def save_vehicle():
+            # Validate
+            if not (owner_name_input.text() and owner_phone_input.text() and plate_input.text()):
+                QMessageBox.warning(dialog, "Lỗi", "Vui lòng điền đầy đủ thông tin bắt buộc!")
+                return
             
-            if success:
-                # Refresh the list
-                refresh_vehicle_list(main_window)
+            # Create new vehicle entry
+            try:
+                # Sử dụng database manager để thêm xe
+                db = DatabaseManager()
+                success, result = db.add_vehicle(
+                    plate=plate_input.text(),
+                    owner=owner_name_input.text(),
+                    phone=owner_phone_input.text(),
+                    vehicle_type=vehicle_type_input.currentText(),
+                    brand=brand_input.currentText(),
+                    color=color_input.text(),
+                    notes=notes_input.text()
+                )
                 
-                QMessageBox.information(dialog, "Thành công", "Đã thêm xe mới vào hệ thống!")
-                dialog.accept()
-            else:
-                QMessageBox.critical(dialog, "Lỗi", f"Không thể thêm xe: {result}")
-            
-        except Exception as e:
-            QMessageBox.critical(dialog, "Lỗi", f"Không thể thêm xe: {str(e)}")
-    
-    # Connect buttons
-    save_btn.clicked.connect(save_vehicle)
-    cancel_btn.clicked.connect(dialog.reject)
-    
-    dialog.exec_()
+                if success:
+                    # Refresh the list
+                    refresh_vehicle_list(main_window)
+                    
+                    QMessageBox.information(dialog, "Thành công", "Đã thêm xe mới vào hệ thống!")
+                    dialog.accept()
+                else:
+                    QMessageBox.critical(dialog, "Lỗi", f"Không thể thêm xe: {result}")
+                
+            except Exception as e:
+                QMessageBox.critical(dialog, "Lỗi", f"Không thể thêm xe: {str(e)}")
+        
+        # Connect buttons
+        save_btn.clicked.connect(save_vehicle)
+        cancel_btn.clicked.connect(dialog.reject)
+        
+        dialog.exec_()
+    except Exception as e:
+        logging.error(f"Error in add_new_vehicle_dialog: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra: {str(e)}")
