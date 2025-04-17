@@ -507,8 +507,7 @@ def correct_plate_format(plate_text):
         for old, new in replacements.items():
             cleaned = cleaned.replace(old, new)
         
-        # Kiểm tra và sửa định dạng phổ biến
-        
+        # Kiểm tra và sửa định dạng phổ biến        
         # Dạng: 12A12345 (thiếu dấu gạch ngang) -> 12A-123.45
         if re.match(r'^\d{2}[A-Z]\d{5}$', cleaned):
             return f"{cleaned[:3]}-{cleaned[3:6]}.{cleaned[6:]}"

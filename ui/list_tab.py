@@ -456,6 +456,7 @@ def filter_vehicle_list(main_window, search_text="", vehicle_type="Tất cả", 
             phone_item = QTableWidgetItem(vehicle["phone"])
             type_item = QTableWidgetItem(vehicle["type"])
             brand_item = QTableWidgetItem(vehicle["brand"])
+            province_item = QTableWidgetItem(vehicle.get("province", ""))
             date_item = QTableWidgetItem(vehicle["timestamp"])
             
             if i % 2 == 0:
@@ -464,7 +465,7 @@ def filter_vehicle_list(main_window, search_text="", vehicle_type="Tất cả", 
                 row_color = QBrush(QColor(MyColor.WHITE))
             
             for col, item in enumerate([index_item, plate_item, owner_item,
-                                        phone_item, type_item, brand_item, date_item]):
+                                        phone_item, type_item, brand_item,province_item, date_item]):
                 item.setBackground(row_color)
                 table.setItem(row_position, col, item)
         
@@ -561,20 +562,40 @@ def export_vehicle_list(main_window):
                 "CSV files (*.csv)"
             )
             if filename:
-                # Sử dụng database manager để xuất dữ liệu
-                from database.vehicle_model import export_to_csv
-                
-                if export_to_csv(main_window.vehicle_data, filename):
+                try:
+                    import csv
+                    with open(filename, 'w', newline='', encoding='utf-8') as f:
+                        writer = csv.writer(f)
+                        # Write header
+                        writer.writerow([
+                            "STT", "Biển số", "Chủ xe", "Số điện thoại",
+                            "Loại xe", "Hãng xe", "Tỉnh/Thành phố", "Thời gian đăng ký"
+                        ])
+                        
+                        # Write data
+                        for i, vehicle in enumerate(main_window.vehicle_data):
+                            writer.writerow([
+                                i+1,
+                                vehicle.get("plate", ""),
+                                vehicle.get("owner", ""),
+                                vehicle.get("phone", ""),
+                                vehicle.get("type", ""),
+                                vehicle.get("brand", ""),
+                                vehicle.get("province", ""),
+                                vehicle.get("timestamp", "")
+                            ])
+                    
                     QMessageBox.information(
                         main_window,
                         "Xuất thành công",
                         f"Đã xuất danh sách xe ra file CSV: {filename}"
                     )
-                else:
+                except Exception as e:
+                    logging.error(f"Error exporting to CSV: {str(e)}")
                     QMessageBox.warning(
                         main_window,
                         "Lỗi",
-                        "Không thể xuất dữ liệu ra file CSV."
+                        f"Không thể xuất dữ liệu ra file CSV: {str(e)}"
                     )
         
         # Function to export as Excel

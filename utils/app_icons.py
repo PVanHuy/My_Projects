@@ -5,28 +5,28 @@ from colors.my_colors import MyColor
 import logging
 
 class AppIcons:
-    """Class that manages application icons using QtAwesome"""
+    """Lớp quản lý các biểu tượng ứng dụng sử dụng QtAwesome"""
     
     @staticmethod
     def get_icon(icon_name, color=MyColor.PRIMARY, size=None):
-        """Get a QtAwesome icon with specified parameters"""
+        """Lấy biểu tượng QtAwesome với các thông số chỉ định"""
         if icon_name is None:
-            # Return empty icon if None is provided
+            # Trả về biểu tượng rỗng nếu không có tên
             return QIcon()
             
         options = {'color': color}
         if size:
-            options['scale_factor'] = size / 16  # Assuming 16px as base size
+            options['scale_factor'] = size / 16  # Giả định kích thước cơ sở là 16px
         
-        # Map icon names to FontAwesome names
+        # Ánh xạ tên biểu tượng tới tên FontAwesome
         icon_map = {
-            # Tab icons
+            # Biểu tượng tab
             'register': 'fa5s.car',
             'list': 'fa5s.list-alt',
             'search': 'fa5s.search',
             'stats': 'fa5s.chart-bar',
             
-            # Action icons
+            # Biểu tượng hành động
             'save': 'fa5s.save',
             'delete': 'fa5s.trash-alt',
             'export': 'fa5s.file-export',
@@ -61,12 +61,12 @@ class AppIcons:
             'app': 'fa5s.id-card',
             'cancel': 'fa5s.times',
             
-            # Theme related icons
+            # Biểu tượng liên quan đến giao diện
             'moon': 'fa5s.moon',
             'sun': 'fa5s.sun',
             'palette': 'fa5s.palette',
             
-            # Menu and toolbar icons
+            # Biểu tượng menu và thanh công cụ
             'file': 'fa5s.file',
             'folder': 'fa5s.folder',
             'folder-open': 'fa5s.folder-open',
@@ -85,24 +85,24 @@ class AppIcons:
         }
         
         try:
-            # Attempt to use the mapped icon name or the provided name if not in map
+            # Sử dụng tên biểu tượng đã ánh xạ hoặc tên đã cung cấp nếu không có trong bản đồ
             fa_name = icon_map.get(icon_name.lower(), icon_name)
             return qta.icon(fa_name, **options)
         except Exception as e:
-            # Log error and create a fallback icon
-            logging.warning(f"Error creating icon '{icon_name}': {str(e)}")
+            # Ghi lại lỗi và tạo biểu tượng dự phòng
+            logging.warning(f"Lỗi khi tạo biểu tượng '{icon_name}': {str(e)}")
             
-            # Create a simple fallback icon
+            # Tạo biểu tượng dự phòng đơn giản
             return AppIcons._create_fallback_icon(color)
     
     @staticmethod
     def _create_fallback_icon(color=MyColor.PRIMARY):
-        """Create a simple fallback icon when QtAwesome fails"""
+        """Tạo biểu tượng dự phòng đơn giản khi QtAwesome thất bại"""
         icon = QIcon()
         pixmap = QPixmap(64, 64)
         pixmap.fill(Qt.transparent)
         
-        # Draw a simple shape as fallback
+        # Vẽ hình dạng đơn giản làm biểu tượng dự phòng
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
@@ -115,7 +115,7 @@ class AppIcons:
     
     @staticmethod
     def get_pixmap(icon_name, color=MyColor.PRIMARY, size=QSize(32, 32)):
-        """Convert a QtAwesome icon to QPixmap with specified size"""
+        """Chuyển đổi biểu tượng QtAwesome thành QPixmap với kích thước chỉ định"""
         if isinstance(size, int):
             size = QSize(size, size)
         
@@ -124,7 +124,7 @@ class AppIcons:
     
     @staticmethod
     def create_colored_button_icon(icon_name, normal_color=MyColor.PRIMARY, hover_color=MyColor.ACCENT):
-        """Create an icon with normal and hover states for buttons"""
+        """Tạo biểu tượng với trạng thái bình thường và di chuột cho các nút"""
         try:
             normal_icon = AppIcons.get_icon(icon_name, normal_color)
             hover_icon = AppIcons.get_icon(icon_name, hover_color)
@@ -137,5 +137,5 @@ class AppIcons:
             
             return icon
         except Exception as e:
-            logging.warning(f"Error creating colored button icon: {str(e)}")
+            logging.warning(f"Lỗi khi tạo biểu tượng nút màu: {str(e)}")
             return AppIcons.get_icon(icon_name, normal_color)

@@ -14,32 +14,32 @@ class LicensePlateApp(QMainWindow):
         self.setGeometry(100, 100, 1200, 800)
         self.setMinimumSize(QSize(1000, 700))
         
-        # Initialize sample data
+        # Khởi tạo dữ liệu mẫu
         self.vehicle_data = []
         
-        # Set up the main window UI
+        # Thiết lập giao diện chính
         setup_main_window(self)
         
-        # Create menu bar
+        # Tạo thanh menu
         self.create_menu_bar()
         
-        # Create toolbar
+        # Tạo thanh công cụ
         self.create_toolbar()
         
-        # Apply initial stylesheet
+        # Áp dụng giao diện ban đầu
         self.apply_theme()
         
-        # Connect theme manager signal to update UI when theme changes
+        # Kết nối tín hiệu từ theme_manager để cập nhật UI khi chủ đề thay đổi
         theme_manager.themeChanged.connect(self.on_theme_changed)
     
     def create_menu_bar(self):
-        """Create the application menu bar"""
+        """Tạo thanh menu cho ứng dụng"""
         menubar = self.menuBar()
         
-        # File menu
+        # Menu File
         file_menu = menubar.addMenu("&File")
         
-        # Add actions to File menu
+        # Thêm các hành động vào menu File
         new_action = QAction("&Thêm xe mới", self)
         new_action.setIcon(AppIcons.get_icon("add"))
         new_action.setShortcut("Ctrl+N")
@@ -62,16 +62,16 @@ class LicensePlateApp(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
-        # Edit menu
+        # Menu Chỉnh sửa
         edit_menu = menubar.addMenu("&Chỉnh sửa")
         
-        # Add actions to Edit menu
+        # Thêm các hành động vào menu Chỉnh sửa
         settings_action = QAction("&Cài đặt", self)
         settings_action.setIcon(AppIcons.get_icon("settings"))
         settings_action.setStatusTip("Mở cài đặt ứng dụng")
         edit_menu.addAction(settings_action)
         
-        # Theme submenu
+        # Menu con cho chủ đề
         theme_menu = QMenu("&Giao diện", self)
         theme_menu.setIcon(AppIcons.get_icon("palette"))
         
@@ -85,14 +85,14 @@ class LicensePlateApp(QMainWindow):
         dark_theme_action.setChecked(theme_manager.current_theme() == theme_manager.DARK)
         dark_theme_action.triggered.connect(lambda: self.change_theme(theme_manager.DARK))
         
-        # Group theme actions
+        # Nhóm các hành động chủ đề
         self.theme_actions = [light_theme_action, dark_theme_action]
         
         theme_menu.addAction(light_theme_action)
         theme_menu.addAction(dark_theme_action)
         edit_menu.addMenu(theme_menu)
         
-        # Help menu
+        # Menu Trợ giúp
         help_menu = menubar.addMenu("&Trợ giúp")
         
         about_action = QAction("&Giới thiệu", self)
@@ -107,14 +107,14 @@ class LicensePlateApp(QMainWindow):
         help_menu.addAction(help_action)
     
     def create_toolbar(self):
-        """Create the application toolbar"""
-        # Main toolbar
+        """Tạo thanh công cụ cho ứng dụng"""
+        # Thanh công cụ chính
         self.toolbar = QToolBar("Main Toolbar")
         self.toolbar.setMovable(False)
         self.toolbar.setIconSize(QSize(24, 24))
         self.addToolBar(Qt.TopToolBarArea, self.toolbar)
         
-        # Add actions to toolbar
+        # Thêm các hành động vào thanh công cụ
         self.toolbar.addAction(AppIcons.get_icon("register"), "Đăng ký xe mới", 
                               lambda: self.tab_widget.setCurrentIndex(0))
         self.toolbar.addAction(AppIcons.get_icon("list"), "Danh sách xe", 
@@ -129,14 +129,14 @@ class LicensePlateApp(QMainWindow):
         
         self.toolbar.addSeparator()
         
-        # Theme toggle button
+        # Nút chuyển đổi chủ đề
         self.theme_toggle_action = QAction("Chuyển đổi giao diện", self)
         self.update_theme_icon()
         self.theme_toggle_action.triggered.connect(theme_manager.toggle_theme)
         self.toolbar.addAction(self.theme_toggle_action)
     
     def update_theme_icon(self):
-        """Update the theme toggle button icon based on current theme"""
+        """Cập nhật biểu tượng nút chuyển đổi chủ đề dựa trên chủ đề hiện tại"""
         if theme_manager.current_theme() == theme_manager.LIGHT:
             self.theme_toggle_action.setIcon(AppIcons.get_icon("moon"))
             self.theme_toggle_action.setStatusTip("Chuyển sang chế độ nền tối")
@@ -145,8 +145,8 @@ class LicensePlateApp(QMainWindow):
             self.theme_toggle_action.setStatusTip("Chuyển sang chế độ nền sáng")
     
     def change_theme(self, theme_name):
-        """Change the application theme"""
-        # Update checkable actions
+        """Thay đổi chủ đề ứng dụng"""
+        # Cập nhật trạng thái các nút chọn
         for action in self.theme_actions:
             if action.text() == "&Nền sáng" and theme_name == theme_manager.LIGHT:
                 action.setChecked(True)
@@ -155,42 +155,42 @@ class LicensePlateApp(QMainWindow):
             else:
                 action.setChecked(False)
         
-        # Set the theme
+        # Đặt chủ đề
         theme_manager.set_theme(theme_name)
     
     def on_theme_changed(self, theme_name):
-        """Handle theme change event"""
+        """Xử lý sự kiện khi chủ đề thay đổi"""
         self.update_theme_icon()
         self.apply_theme()
     
     def apply_theme(self):
-        """Apply the current theme to the application"""
+        """Áp dụng chủ đề hiện tại cho ứng dụng"""
         apply_stylesheet(self)
         
-        # Force repaint of all widgets
+        # Vẽ lại tất cả các widget
         self.update()
         
-        # Update status bar with theme info
+        # Cập nhật thanh trạng thái với thông tin chủ đề
         if hasattr(self, 'statusBar'):
             current_theme = "Nền sáng" if theme_manager.current_theme() == theme_manager.LIGHT else "Nền tối"
             self.statusBar().showMessage(f"Giao diện: {current_theme}")
     
     def on_add_new_vehicle(self):
-        """Show dialog to add new vehicle"""
-        # Switch to registration tab
+        """Hiển thị hộp thoại để thêm xe mới"""
+        # Chuyển đến tab đăng ký
         self.tab_widget.setCurrentIndex(0)
         
-        # Focus on first input field after a short delay
+        # Đặt focus vào trường nhập liệu đầu tiên sau một khoảng thời gian ngắn
         QTimer.singleShot(100, lambda: self.owner_name_input.setFocus() if hasattr(self, 'owner_name_input') else None)
     
     def refresh_data(self):
-        """Refresh all data views"""
-        # Determine current tab and refresh accordingly
+        """Làm mới tất cả các chế độ xem dữ liệu"""
+        # Xác định tab hiện tại và làm mới tương ứng
         current_tab = self.tab_widget.currentIndex()
         
-        if current_tab == 1:  # List tab
+        if current_tab == 1:  # Tab Danh sách
             from ui.list_tab import refresh_vehicle_list
             refresh_vehicle_list(self)
-        elif current_tab == 2:  # Search tab
+        elif current_tab == 2:  # Tab Tìm kiếm
             if hasattr(self, 'reset_search_tab'):
                 self.reset_search_tab()
