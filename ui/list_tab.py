@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit,
     QAbstractItemView, QGroupBox, QFileDialog, QMessageBox,
     QFormLayout, QDialog, QDateEdit, QCheckBox, QSpacerItem,
-    QSizePolicy
+    QSizePolicy, QInputDialog
 )
 from PyQt5.QtGui import QFont, QIcon, QColor, QBrush
 from PyQt5.QtCore import Qt, QSize, QDate
@@ -327,6 +327,11 @@ def setup_list_tab(tab, main_window):
     edit_btn = create_styled_button("Sửa thông tin", "edit", "primary")
     edit_btn.clicked.connect(lambda: edit_selected_vehicle(main_window))
 
+    # Change history button
+    history_btn = create_styled_button("Xem lịch sử", "history", "info")
+    history_btn.clicked.connect(lambda: view_vehicle_history(main_window))
+    button_layout.addWidget(history_btn)
+
     # Delete button
     delete_btn = create_styled_button("Xóa xe đã chọn", "delete", "danger")
     delete_btn.setObjectName("deleteButton")
@@ -369,7 +374,246 @@ def setup_list_tab(tab, main_window):
         'date_check': date_check
     }
 
+def view_vehicle_history(main_window):
+    """Hiển thị lịch sử thay đổi của xe đã chọn"""
+    try:
+        selected_row = main_window.vehicle_table.currentRow()
+        if selected_row >= 0:
+            # Lấy ID của xe đã chọn
+            vehicle_id = main_window.vehicle_table.item(selected_row, 0).data(Qt.UserRole)
+            plate = main_window.vehicle_table.item(selected_row, 1).text()
+            
+            if not vehicle_id:
+                # Trường hợp không lưu ID trực tiếp, tìm theo biển số
+                db = DatabaseManager()
+                vehicle = db.get_vehicle_by_plate(plate)
+                if not vehicle:
+                    QMessageBox.warning(
+                        main_window,
+                        "Lỗi",
+                        "Không thể tìm thấy thông tin xe này."
+                    )
+                    return
+                vehicle_id = vehicle.get("id")
+            
+            # Lấy lịch sử thay đổi
+            db = DatabaseManager()
+            history_list = db.get_vehicle_history(vehicle_id)
+            
+            if not history_list:
+                QMessageBox.information(
+                    main_window,
+                    "Thông báo",
+                    f"Không có lịch sử thay đổi nào cho xe biển số {plate}."
+                )
+                return
+            
+            # Hiển thị dialog lịch sử
+            show_history_dialog(main_window, plate, history_list)
+        else:
+            QMessageBox.warning(
+                main_window,
+                "Lỗi",
+                "Vui lòng chọn xe cần xem lịch sử trong danh sách."
+            )
+    except Exception as e:
+        logging.error(f"Error in view_vehicle_history: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi xem lịch sử: {str(e)}")
 
+def show_history_dialog(main_window, plate, history_list):
+    """Hiển thị dialog lịch sử thay đổi"""
+    dialog = QDialog(main_window)
+    dialog.setWindowTitle(f"Lịch sử thay đổi - Biển số: {plate}")
+    dialog.setMinimumWidth(650)
+    dialog.setMinimumHeight(400)
+    
+    layout = QVBoxLayout(dialog)
+    
+    # Tiêu đề
+    title_label = QLabel(f"LỊCH SỬ THAY ĐỔI XE BIỂN SỐ: {plate}")
+    title_label.setFont(QFont("Arial", 12, QFont.Bold))
+    title_label.setAlignment(Qt.AlignCenter)
+    layout.addWidget(title_label)
+    
+    # Bảng lịch sử
+    history_table = QTableWidget()
+    history_table.setColumnCount(4)
+    history_table.setHorizontalHeaderLabels([
+        "STT", "Loại thay đổi", "Thời gian", "Mô tả"
+    ])
+    history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+    history_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+    history_table.setAlternatingRowColors(True)
+    
+    # Thiết lập độ rộng cột
+    header = history_table.horizontalHeader()
+    header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # STT
+    header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Loại thay đổi
+    header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Thời gian
+    header.setSectionResizeMode(3, QHeaderView.Stretch)           # Mô tả
+    
+    # Thêm dữ liệu vào bảng
+    history_table.setRowCount(len(history_list))
+    
+    for i, history in enumerate(history_list):
+        # STT
+        stt_item = QTableWidgetItem(str(i + 1))
+        stt_item.setTextAlignment(Qt.AlignCenter)
+        history_table.setItem(i, 0, stt_item)
+        
+        # Loại thay đổi - Chuyển đổi sang tiếng Việt
+        change_type = history.get("change_type", "")
+        change_type_text = {
+            "ADD": "Thêm mới",
+            "UPDATE": "Cập nhật",
+            "DELETE": "Xóa"
+        }.get(change_type, change_type)
+        
+        change_type_item = QTableWidgetItem(change_type_text)
+        
+        # Màu sắc theo loại thay đổi
+        if change_type == "ADD":
+            change_type_item.setForeground(QBrush(QColor(MyColor.SUCCESS)))
+        elif change_type == "UPDATE":
+            change_type_item.setForeground(QBrush(QColor(MyColor.INFO)))
+        elif change_type == "DELETE":
+            change_type_item.setForeground(QBrush(QColor(MyColor.DANGER)))
+        
+        change_type_item.setTextAlignment(Qt.AlignCenter)
+        history_table.setItem(i, 1, change_type_item)
+        
+        # Thời gian
+        time_item = QTableWidgetItem(history.get("change_time", ""))
+        time_item.setTextAlignment(Qt.AlignCenter)
+        history_table.setItem(i, 2, time_item)
+        
+        # Mô tả
+        desc_item = QTableWidgetItem(history.get("description", ""))
+        history_table.setItem(i, 3, desc_item)
+    
+    layout.addWidget(history_table)
+    
+    # Nút đóng
+    close_btn = create_styled_button("Đóng", "cancel", "danger")
+    close_btn.clicked.connect(dialog.reject)
+    
+    # Nút xuất lịch sử
+    export_btn = create_styled_button("Xuất lịch sử", "export", "success")
+    export_btn.clicked.connect(lambda: export_history(main_window, plate, history_list))
+    
+    # Layout cho các nút
+    btn_layout = QHBoxLayout()
+    btn_layout.addWidget(export_btn)
+    btn_layout.addWidget(close_btn)
+    layout.addLayout(btn_layout)
+    
+    dialog.exec_()
+
+def export_history(main_window, plate, history_list):
+    """Xuất lịch sử thay đổi ra file"""
+    try:
+        # Hiển thị hộp thoại chọn định dạng xuất
+        export_format, ok = QInputDialog.getItem(
+            main_window,
+            "Xuất lịch sử",
+            "Chọn định dạng file:",
+            ["CSV", "Excel", "PDF"],
+            0,
+            False
+        )
+        
+        if not ok:
+            return
+            
+        # Hiển thị hộp thoại lưu file
+        file_name, _ = QFileDialog.getSaveFileName(
+            main_window,
+            "Lưu lịch sử thay đổi",
+            f"Lich_su_thay_doi_{plate.replace('-', '_').replace('.', '_')}",
+            "CSV Files (*.csv);;Excel Files (*.xlsx);;PDF Files (*.pdf)"
+        )
+        
+        if not file_name:
+            return
+            
+        # Chuẩn bị dữ liệu xuất
+        export_data = []
+        for i, history in enumerate(history_list):
+            change_type = history.get("change_type", "")
+            change_type_text = {
+                "ADD": "Thêm mới",
+                "UPDATE": "Cập nhật",
+                "DELETE": "Xóa"
+            }.get(change_type, change_type)
+            
+            export_data.append({
+                "STT": i + 1,
+                "Loại thay đổi": change_type_text,
+                "Thời gian": history.get("change_time", ""),
+                "Mô tả": history.get("description", "")
+            })
+        
+        # Xuất dữ liệu theo định dạng
+        if export_format == "CSV" or file_name.endswith('.csv'):
+            import csv
+            with open(file_name, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=["STT", "Loại thay đổi", "Thời gian", "Mô tả"])
+                writer.writeheader()
+                writer.writerows(export_data)
+                
+        elif export_format == "Excel" or file_name.endswith('.xlsx'):
+            import pandas as pd
+            df = pd.DataFrame(export_data)
+            df.to_excel(file_name, index=False)
+            
+        elif export_format == "PDF" or file_name.endswith('.pdf'):
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            
+            doc = SimpleDocTemplate(file_name, pagesize=letter)
+            elements = []
+            
+            # Tiêu đề
+            styles = getSampleStyleSheet()
+            title = Paragraph(f"LỊCH SỬ THAY ĐỔI XE BIỂN SỐ: {plate}", styles['Heading1'])
+            elements.append(title)
+            elements.append(Spacer(1, 12))
+            
+            # Dữ liệu bảng
+            data = [["STT", "Loại thay đổi", "Thời gian", "Mô tả"]]
+            for item in export_data:
+                data.append([item["STT"], item["Loại thay đổi"], item["Thời gian"], item["Mô tả"]])
+            
+            # Tạo bảng
+            table = Table(data)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            elements.append(table)
+            
+            # Tạo PDF
+            doc.build(elements)
+        
+        QMessageBox.information(
+            main_window,
+            "Xuất thành công",
+            f"Đã xuất lịch sử thay đổi ra file: {file_name}"
+        )
+            
+    except Exception as e:
+        logging.error(f"Error exporting history: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi xuất lịch sử: {str(e)}")
+        
 def refresh_vehicle_list(main_window):
     """Refresh the vehicle list table with current data"""
     try:
@@ -389,7 +633,8 @@ def refresh_vehicle_list(main_window):
 
             index_item = QTableWidgetItem(str(i + 1))
             index_item.setTextAlignment(Qt.AlignCenter)
-
+            index_item.setData(Qt.UserRole, vehicle.get("id"))
+            
             plate_item = QTableWidgetItem(vehicle["plate"])
             plate_item.setFont(QFont("Arial", 10, QFont.Bold))
 

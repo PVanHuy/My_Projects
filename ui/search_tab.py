@@ -2,7 +2,8 @@ from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout,
     QGroupBox, QGridLayout, QMessageBox, QGraphicsOpacityEffect,
     QFrame, QSplitter, QWidget, QFileDialog, QDialog, QFormLayout,
-    QProgressDialog
+    QProgressDialog, QTableWidget, QTableWidgetItem, QHeaderView,
+    QAbstractItemView, QInputDialog
 )
 from PyQt5.QtGui import QPixmap, QFont, QColor, QBrush, QPainter, QPen
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QSize, QDate
@@ -238,10 +239,15 @@ def setup_search_tab(tab, window):
     # Print info button - new feature
     print_btn = create_styled_button("In thông tin", "print", "primary")
     
+    # Thêm nút Xem lịch sử mới
+    history_btn = create_styled_button("Xem lịch sử", "history", "info")
+    history_btn.setObjectName("historyButton")
+    
     # Add buttons to layout
     button_layout.addWidget(clear_btn)
     button_layout.addWidget(export_btn)
     button_layout.addWidget(print_btn)
+    button_layout.addWidget(history_btn) 
     layout.addLayout(button_layout)
     
     # Connect event handlers
@@ -756,7 +762,128 @@ def setup_search_tab(tab, window):
     export_btn.clicked.connect(export_vehicle_info)
     print_btn.clicked.connect(print_vehicle_info)
 
+    # Hàm xử lý khi nhấn nút Xem lịch sử
+    def view_history():
+        """Hiển thị lịch sử thay đổi của xe đang xem"""
+        if window.owner_value.text() == "-":
+            QMessageBox.warning(tab, "Lỗi", "Không có thông tin xe để xem lịch sử.")
+            return
+            
+        # Lấy biển số xe đang tìm
+        plate = window.search_input.text().strip()
+        if not plate:
+            QMessageBox.warning(tab, "Lỗi", "Không có thông tin biển số.")
+            return
+            
+        # Lấy thông tin xe
+        db = DatabaseManager()
+        vehicle = db.get_vehicle_by_plate(plate)
+        
+        if not vehicle:
+            QMessageBox.warning(tab, "Lỗi", "Không thể tìm thấy thông tin xe này.")
+            return
+            
+        # Lấy lịch sử thay đổi
+        history_list = db.get_vehicle_history(vehicle.get("id"))
+        
+        if not history_list:
+            QMessageBox.information(
+                tab, 
+                "Thông báo",
+                f"Không có lịch sử thay đổi nào cho xe biển số {plate}."
+            )
+            return
+        
+        # Hiển thị dialog lịch sử
+        show_history_dialog(window, plate, history_list)
 
+    # Định nghĩa hàm hiển thị dialog lịch sử
+    def show_history_dialog(main_window, plate, history_list):
+        """Hiển thị dialog lịch sử thay đổi"""
+        dialog = QDialog(main_window)
+        dialog.setWindowTitle(f"Lịch sử thay đổi - Biển số: {plate}")
+        dialog.setMinimumWidth(650)
+        dialog.setMinimumHeight(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Tiêu đề
+        title_label = QLabel(f"LỊCH SỬ THAY ĐỔI XE BIỂN SỐ: {plate}")
+        title_label.setFont(QFont("Arial", 12, QFont.Bold))
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # Bảng lịch sử
+        history_table = QTableWidget()
+        history_table.setColumnCount(4)
+        history_table.setHorizontalHeaderLabels([
+            "STT", "Loại thay đổi", "Thời gian", "Mô tả"
+        ])
+        history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        history_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        history_table.setAlternatingRowColors(True)
+        
+        # Thiết lập độ rộng cột
+        header = history_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # STT
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Loại thay đổi
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Thời gian
+        header.setSectionResizeMode(3, QHeaderView.Stretch)           # Mô tả
+        
+        # Thêm dữ liệu vào bảng
+        history_table.setRowCount(len(history_list))
+        
+        for i, history in enumerate(history_list):
+            # STT
+            stt_item = QTableWidgetItem(str(i + 1))
+            stt_item.setTextAlignment(Qt.AlignCenter)
+            history_table.setItem(i, 0, stt_item)
+            
+            # Loại thay đổi - Chuyển đổi sang tiếng Việt
+            change_type = history.get("change_type", "")
+            change_type_text = {
+                "ADD": "Thêm mới",
+                "UPDATE": "Cập nhật",
+                "DELETE": "Xóa"
+            }.get(change_type, change_type)
+            
+            change_type_item = QTableWidgetItem(change_type_text)
+            
+            # Màu sắc theo loại thay đổi
+            if change_type == "ADD":
+                change_type_item.setForeground(QBrush(QColor(MyColor.SUCCESS)))
+            elif change_type == "UPDATE":
+                change_type_item.setForeground(QBrush(QColor(MyColor.INFO)))
+            elif change_type == "DELETE":
+                change_type_item.setForeground(QBrush(QColor(MyColor.DANGER)))
+            
+            change_type_item.setTextAlignment(Qt.AlignCenter)
+            history_table.setItem(i, 1, change_type_item)
+            
+            # Thời gian
+            time_item = QTableWidgetItem(history.get("change_time", ""))
+            time_item.setTextAlignment(Qt.AlignCenter)
+            history_table.setItem(i, 2, time_item)
+            
+            # Mô tả
+            desc_item = QTableWidgetItem(history.get("description", ""))
+            history_table.setItem(i, 3, desc_item)
+        
+        layout.addWidget(history_table)
+        
+        # Nút đóng
+        close_btn = create_styled_button("Đóng", "cancel", "danger")
+        close_btn.clicked.connect(dialog.reject)
+        
+        # Layout cho các nút
+        btn_layout = QHBoxLayout()
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+        
+        dialog.exec_()
+
+    # Kết nối nút với hàm xử lý
+    history_btn.clicked.connect(view_history)
     def generate_license_plate_image(plate_text, width, height):
         """Generate a simple rendered license plate image with the given text"""
         pixmap = QPixmap(width, height)

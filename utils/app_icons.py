@@ -81,6 +81,7 @@ class AppIcons:
             'server': 'fa5s.server',
             'cloud': 'fa5s.cloud',
             'cloud-upload': 'fa5s.cloud-upload-alt',
+            'history': 'fa5s.history',
             'cloud-download': 'fa5s.cloud-download-alt'
         }
         
