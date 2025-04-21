@@ -7,18 +7,35 @@ import logging
 import traceback
 from logging.handlers import RotatingFileHandler
 
+# Cấu hình singleton cho OCR
+class OCRSingleton:
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            try:
+                import easyocr
+                print("Khởi tạo EasyOCR (chỉ xảy ra một lần)...")
+                os.environ['EASYOCR_DISABLE_PROGRESS_BAR'] = 'True'
+                cls._instance = easyocr.Reader(['en', 'vi'], gpu=False, verbose=False)
+            except Exception as e:
+                print(f"Lỗi khởi tạo EasyOCR: {e}")
+                cls._instance = None
+        return cls._instance
+
 # Configure logging
 logger = logging.getLogger('plate_recognizer')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)  # Giảm mức độ logging xuống WARNING thay vì INFO
 
 # Console handler
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
+console_handler.setLevel(logging.WARNING)
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(console_handler)
 
 # Safe logging function for handling Vietnamese characters
-def safe_log(msg, level=logging.INFO):
+def safe_log(msg, level=logging.WARNING):
     try:
         logger.log(level, msg)
     except UnicodeEncodeError:
@@ -32,6 +49,10 @@ class LicensePlateRecognizer:
         self.ocr_available = False
         self.tesseract_available = False
         self.reader = None
+        self._last_image_path = None
+        self._last_plate = None
+        self._last_processed_img = None
+        self._last_image_hash = None
         
         # Try to load EasyOCR
         try:
@@ -42,13 +63,11 @@ class LicensePlateRecognizer:
             sys.stderr = io.StringIO()
             
             try:
-                os.environ['EASYOCR_DISABLE_PROGRESS_BAR'] = 'True'
-                
-                import easyocr
-                safe_log("Initializing EasyOCR. This may take a moment...")
-                self.reader = easyocr.Reader(['en', 'vi'], gpu=False, verbose=False)
-                self.ocr_available = True
-                safe_log("EasyOCR successfully loaded")
+                # Sử dụng singleton cho EasyOCR
+                self.reader = OCRSingleton.get_instance()
+                if self.reader:
+                    self.ocr_available = True
+                    safe_log("EasyOCR successfully loaded")
             finally:
                 captured_output = sys.stdout.getvalue()
                 captured_error = sys.stderr.getvalue()
@@ -129,7 +148,7 @@ class LicensePlateRecognizer:
         self.min_valid_confidence = 0.3  # Min confidence for valid results
 
     def preprocess_image(self, image):
-        """Preprocess the image with multiple methods to enhance license plate recognition"""
+        """Preprocess the image with optimized methods to enhance license plate recognition"""
         # Check image size and resize if needed
         h, w = image.shape[:2]
         
@@ -139,67 +158,34 @@ class LicensePlateRecognizer:
             image = cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
             safe_log(f"Image resized from {w}x{h} to {new_size[0]}x{new_size[1]}")
         
-        # Store processed images in a dictionary
+        # Reduced number of processed images for better performance
         results = {}
         
         # 1. Basic grayscale conversion
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
         results['gray'] = gray
         
-        # 2. Histogram equalization
-        gray_eq = cv2.equalizeHist(gray)
-        results['gray_eq'] = gray_eq
-        
-        # 3. CLAHE - Contrast Limited Adaptive Histogram Equalization
+        # 2. CLAHE - Contrast Limited Adaptive Histogram Equalization
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         gray_clahe = clahe.apply(gray)
         results['gray_clahe'] = gray_clahe
         
-        # 4. Denoising filters
-        blur = cv2.bilateralFilter(gray_clahe, 11, 17, 17)  # Better edge preservation
+        # 3. Edge detection
+        # Apply bilateral filter first for better edge preservation
+        blur = cv2.bilateralFilter(gray_clahe, 11, 17, 17)
         results['blur'] = blur
         
-        gaussian_blur = cv2.GaussianBlur(gray_clahe, (5, 5), 0)
-        results['gaussian_blur'] = gaussian_blur
-        
-        # 5. Edge detection methods
         edges = cv2.Canny(blur, 100, 200)
         results['edges'] = edges
         
-        # 6. Thresholding methods
+        # 4. Thresholding
         _, thresh_otsu = cv2.threshold(gray_clahe, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         results['thresh_otsu'] = thresh_otsu
         
-        _, thresh_otsu_inv = cv2.threshold(gray_clahe, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        results['thresh_otsu_inv'] = thresh_otsu_inv
-        
-        # 7. Adaptive thresholding
+        # 5. Adaptive thresholding
         adaptive_thresh = cv2.adaptiveThreshold(gray_clahe, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                                cv2.THRESH_BINARY, 11, 2)
+                                            cv2.THRESH_BINARY, 11, 2)
         results['adaptive_thresh'] = adaptive_thresh
-        
-        # 8. Morphological operations
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        
-        morph_close = cv2.morphologyEx(thresh_otsu, cv2.MORPH_CLOSE, kernel, iterations=2)
-        results['morph_close'] = morph_close
-        
-        # 9. Special processing for national flag plates
-        if len(image.shape) == 3:
-            # Convert to LAB color space to enhance contrast
-            lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-            l, a, b = cv2.split(lab)
-            clahe_lab = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-            l = clahe_lab.apply(l)
-            lab = cv2.merge((l, a, b))
-            enhanced_lab = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-            results['enhanced_lab'] = cv2.cvtColor(enhanced_lab, cv2.COLOR_BGR2GRAY)
-            
-            # Increase contrast and brightness
-            alpha = 1.5  # Contrast factor
-            beta = 20    # Brightness
-            contrast_bright = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
-            results['contrast_bright'] = cv2.cvtColor(contrast_bright, cv2.COLOR_BGR2GRAY)
         
         # Store original image for visualization
         results['original'] = image
@@ -211,15 +197,11 @@ class LicensePlateRecognizer:
         contour_results = []
         h_img, w_img = original_image.shape[:2]
         
-        # List of binary images to find contours
+        # List of binary images to find contours - REDUCED to most effective ones
         binary_images = [
-            ('morph_close', processed_images.get('morph_close')),
             ('thresh_otsu', processed_images.get('thresh_otsu')),
-            ('thresh_otsu_inv', processed_images.get('thresh_otsu_inv')),
             ('adaptive_thresh', processed_images.get('adaptive_thresh')),
-            ('edges', processed_images.get('edges')),
-            ('contrast_bright', processed_images.get('contrast_bright')),
-            ('enhanced_lab', processed_images.get('enhanced_lab'))
+            ('edges', processed_images.get('edges'))
         ]
         
         # Find contours from each processed image
@@ -230,8 +212,8 @@ class LicensePlateRecognizer:
             # Find all contours
             contours, hierarchy = cv2.findContours(image_to_process, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             
-            # Sort contours by area (largest first) and take top 30
-            contours = sorted(contours, key=cv2.contourArea, reverse=True)[:30]
+            # Sort contours by area (largest first) and take top 15 - reduced from 30
+            contours = sorted(contours, key=cv2.contourArea, reverse=True)[:15]
             
             for i, cnt in enumerate(contours):
                 # Calculate perimeter and area
@@ -258,10 +240,6 @@ class LicensePlateRecognizer:
                         # Calculate score based on plate properties
                         score = self.calculate_contour_score(approx, x, y, w, h, area, ratio, original_image)
                         
-                        # Increase score for flag-based plates
-                        if img_name in ['contrast_bright', 'enhanced_lab']:
-                            score += 5
-                            
                         contour_results.append({
                             'contour': cnt,
                             'approx': approx,
@@ -275,10 +253,10 @@ class LicensePlateRecognizer:
         # Filter duplicate contours
         unique_contours = self.filter_duplicate_contours(contour_results)
         
-        # Sort by score and return best contours
+        # Sort by score and return best contours - reduce from 10 to 5
         unique_contours.sort(key=lambda x: x['score'], reverse=True)
         
-        return [(c['contour'], c['approx'], c['bbox']) for c in unique_contours[:10]]
+        return [(c['contour'], c['approx'], c['bbox']) for c in unique_contours[:5]]
     
     def calculate_contour_score(self, approx, x, y, w, h, area, ratio, original_image):
         """Calculate a score for how likely a contour is to be a license plate"""
@@ -383,7 +361,7 @@ class LicensePlateRecognizer:
             # Create dictionary for this plate region
             plate_region = {'bbox': (x, y, w, h), 'original': plate_img}
             
-            # Process plate region with various methods
+            # Process plate region with reduced number of methods for better performance
             
             # 1. Convert to grayscale
             plate_gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY) if len(plate_img.shape) == 3 else plate_img
@@ -394,38 +372,14 @@ class LicensePlateRecognizer:
             plate_clahe = clahe.apply(plate_gray)
             plate_region['clahe'] = plate_clahe
             
-            # 3. Apply Gaussian blur to reduce noise
-            plate_blur = cv2.GaussianBlur(plate_clahe, (5, 5), 0)
-            plate_region['blur'] = plate_blur
-            
-            # 4. Apply binary thresholding
+            # 3. Apply binary thresholding
             _, plate_thresh = cv2.threshold(plate_clahe, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             plate_region['thresh'] = plate_thresh
             
-            _, plate_thresh_inv = cv2.threshold(plate_clahe, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-            plate_region['thresh_inv'] = plate_thresh_inv
-            
-            # 5. Apply adaptive thresholding
+            # 4. Apply adaptive thresholding
             plate_adaptive = cv2.adaptiveThreshold(plate_clahe, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
                                                  cv2.THRESH_BINARY, 11, 2)
             plate_region['adaptive'] = plate_adaptive
-            
-            # 6. Enhance edges with morphological operations
-            kernel = np.ones((2, 2), np.uint8)
-            plate_open = cv2.morphologyEx(plate_thresh_inv, cv2.MORPH_OPEN, kernel, iterations=1)
-            plate_region['open'] = plate_open
-            
-            # 7. Sharpen the image
-            sharp_kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-            plate_sharp = cv2.filter2D(plate_clahe, -1, sharp_kernel)
-            plate_region['sharp'] = plate_sharp
-            
-            # 8. Special processing for plates with flag
-            # Increase contrast dramatically
-            alpha = 2.0  # Contrast factor
-            beta = 50    # Brightness
-            plate_contrast = cv2.convertScaleAbs(plate_gray, alpha=alpha, beta=beta)
-            plate_region['contrast'] = plate_contrast
             
             # Add to the results list
             plate_regions.append(plate_region)
@@ -434,13 +388,13 @@ class LicensePlateRecognizer:
 
     def recognize_text_easyocr(self, image, allowlist=None):
         """Recognize text using EasyOCR with optimized configuration"""
-        if not self.ocr_available:
+        if not self.ocr_available or not self.reader:
             return None
         
         try:
-            # Resize small images to improve recognition
+            # Only resize if the image is very small
             h, w = image.shape[:2]
-            if max(h, w) < 200:
+            if max(h, w) < 150:
                 image = cv2.resize(image, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
             
             # Set allowlist for Vietnamese license plates
@@ -455,22 +409,15 @@ class LicensePlateRecognizer:
             sys.stderr = io.StringIO()
             
             try:
-                # Optimize parameters for license plate recognition
+                # Optimize parameters for license plate recognition - reduced parameters
                 results = self.reader.readtext(
                     image, 
+                    allowlist=allowlist,
                     paragraph=False,
                     detail=1,
-                    allowlist=allowlist,
-                    contrast_ths=0.1,
-                    adjust_contrast=0.5,
-                    text_threshold=0.3,
-                    link_threshold=0.3,
-                    add_margin=0.1,
-                    width_ths=0.5,
-                    height_ths=0.5,
-                    blocklist="*&@#$%^()_+={}[]|\\:;<>?~/",
-                    batch_size=4,
-                    mag_ratio=1.5
+                    text_threshold=0.4,  # Increased threshold for better confidence
+                    link_threshold=0.4,
+                    batch_size=1  # Reduced batch size for memory efficiency
                 )
             finally:
                 # Restore stdout/stderr
@@ -497,39 +444,30 @@ class LicensePlateRecognizer:
             return None
         
         try:
-            # Try different Tesseract configurations
-            configs = [
-                r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.',
-                r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.',
-                r'--oem 3 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.'
-            ]
+            # Try with best configuration only instead of multiple configs
+            config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.'
             
-            results = []
+            text = self.pytesseract.image_to_string(image, config=config)
             
-            for config in configs:
-                text = self.pytesseract.image_to_string(image, config=config)
-                
-                if text:
-                    # Clean the text
-                    cleaned_text = re.sub(r'[^A-Z0-9\-\.]', '', text.upper())
-                    if cleaned_text:
-                        # Get confidence data if available
-                        try:
-                            data = self.pytesseract.image_to_data(image, config=config, output_type=self.pytesseract.Output.DICT)
-                            if data['conf'] and len(data['conf']) > 0:
-                                confidences = [float(conf) for conf in data['conf'] if conf != '-1']
-                                avg_conf = sum(confidences) / len(confidences) if confidences else 70.0
-                                # Normalize to 0-1 scale like EasyOCR
-                                norm_conf = avg_conf / 100.0
-                                results.append((cleaned_text, norm_conf))
-                            else:
-                                results.append((cleaned_text, 0.7))
-                        except:
-                            results.append((cleaned_text, 0.7))
+            if text:
+                # Clean the text
+                cleaned_text = re.sub(r'[^A-Z0-9\-\.]', '', text.upper())
+                if cleaned_text:
+                    # Get confidence data if available
+                    try:
+                        data = self.pytesseract.image_to_data(image, config=config, output_type=self.pytesseract.Output.DICT)
+                        if data['conf'] and len(data['conf']) > 0:
+                            confidences = [float(conf) for conf in data['conf'] if conf != '-1']
+                            avg_conf = sum(confidences) / len(confidences) if confidences else 70.0
+                            # Normalize to 0-1 scale like EasyOCR
+                            norm_conf = avg_conf / 100.0
+                            return [(cleaned_text, norm_conf)]
+                        else:
+                            return [(cleaned_text, 0.7)]
+                    except:
+                        return [(cleaned_text, 0.7)]
             
-            # Sort by confidence
-            results.sort(key=lambda x: x[1], reverse=True)
-            return results if results else None
+            return None
             
         except Exception as e:
             safe_log(f"Tesseract OCR error: {str(e)}", logging.ERROR)
@@ -656,6 +594,10 @@ class LicensePlateRecognizer:
             tuple: (plate_text, result_image)
         """
         try:
+            # Check if we processed this image before and return cached result
+            if hasattr(self, '_last_image_hash') and self._last_image_hash == hash(img.tobytes()):
+                return self._last_plate, self._last_processed_img
+            
             result_image = img.copy()
             
             # Preprocess the image
@@ -687,8 +629,13 @@ class LicensePlateRecognizer:
                                     cv2.polylines(result_image, [bbox_points], True, (0, 255, 0), 2)
                                     cv2.putText(result_image, validated_text, (int(bbox[0][0]), int(bbox[0][1]) - 10), 
                                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                                except:
-                                    pass
+                                except Exception as e:
+                                    safe_log(f"Error drawing detection: {e}", logging.WARNING)
+                                
+                                # Cache the result
+                                self._last_image_hash = hash(img.tobytes())
+                                self._last_plate = self.format_plate_text(validated_text) if output_raw else validated_text
+                                self._last_processed_img = result_image
                                 
                                 # Return either raw or formatted text
                                 if output_raw:
@@ -716,18 +663,17 @@ class LicensePlateRecognizer:
                 has_flag = self.detect_flag(plate_region['original'])
                 flag_bonus = 0.1 if has_flag else 0.0  # Bonus score for plates with flag
                 
-                # Image types in order of preference
+                # Image types in order of preference - REDUCED to most effective ones
                 image_types = [
-                    'clahe', 'adaptive', 'thresh',
-                    'thresh_inv', 'sharp', 'contrast',
-                    'gray', 'original'
+                    'clahe', 'adaptive', 'thresh', 'gray', 'original'
                 ]
                 
                 # Try EasyOCR first
-                if self.ocr_available:
+                if self.ocr_available and self.reader:
                     allowlist = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. "
                     
-                    for img_type in image_types:
+                    # Only try on the most promising image type first
+                    for img_type in image_types[:2]:  # Only try first 2 types to improve speed
                         if img_type in plate_region:
                             text_results = self.recognize_text_easyocr(plate_region[img_type], allowlist)
                             
@@ -739,10 +685,14 @@ class LicensePlateRecognizer:
                                         # Calculate combined confidence score
                                         final_conf = prob * extra_conf + flag_bonus
                                         region_results.append((validated_text, final_conf, "easyocr", img_type))
+                                        
+                                # If we found valid results, no need to try other image types
+                                if region_results:
+                                    break
                 
-                # Try Tesseract as fallback
-                if self.tesseract_available and (not region_results or len(region_results) < 2):
-                    for img_type in image_types:
+                # Try Tesseract only if EasyOCR failed or not available
+                if self.tesseract_available and (not region_results):
+                    for img_type in image_types[:2]:  # Only try first 2 types
                         if img_type in plate_region:
                             text_results = self.recognize_text_tesseract(plate_region[img_type])
                             
@@ -753,6 +703,10 @@ class LicensePlateRecognizer:
                                     if valid:
                                         final_conf = prob * extra_conf + flag_bonus
                                         region_results.append((validated_text, final_conf, "tesseract", img_type))
+                                
+                                # If we found valid results, stop trying other image types
+                                if region_results:
+                                    break
                 
                 # If we have results for this region
                 if region_results:
@@ -790,21 +744,14 @@ class LicensePlateRecognizer:
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 
                 if province_info:
-                    from PIL import ImageFont, ImageDraw, Image
-
-                    # Chuyển từ OpenCV image (numpy) sang PIL
-                    result_image_pil = Image.fromarray(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))
-                    draw = ImageDraw.Draw(result_image_pil)
-
-                    # Dùng font Unicode (ví dụ: Arial Unicode, hoặc font Việt Unicode khác)
-                    font = ImageFont.truetype("arial.ttf", 20)  # bạn có thể thay bằng đường dẫn đến font hỗ trợ tiếng Việt
-
-                    # Vẽ chữ tỉnh
-                    draw.text((220, 5), f"({province_info})", font=font, fill=(0, 255, 0))
-
-                    # Chuyển lại về OpenCV image
-                    result_image = cv2.cvtColor(np.array(result_image_pil), cv2.COLOR_RGB2BGR)
-
+                    # Simpler way to add province info without PIL
+                    cv2.putText(result_image, f"({province_info})", (220, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                # Cache the result
+                self._last_image_hash = hash(img.tobytes())
+                self._last_plate = self.format_plate_text(best_plate) if output_raw else best_plate
+                self._last_processed_img = result_image
                 
                 # Return either raw or formatted text
                 if output_raw:
@@ -828,6 +775,10 @@ class LicensePlateRecognizer:
             output_raw: If True, returns raw text without formatting
         """
         try:
+            # Check for cached result to avoid reprocessing
+            if hasattr(self, '_last_image_path') and self._last_image_path == image_path:
+                return self._last_plate, self._last_processed_img
+                
             # Read the image
             image = cv2.imread(image_path)
             if image is None:
@@ -838,6 +789,11 @@ class LicensePlateRecognizer:
             
             # Detect plate from the image
             plate_number, result_image = self.detect_plate_from_image(image, output_raw)
+            
+            # Cache the result
+            self._last_image_path = image_path
+            self._last_plate = plate_number
+            self._last_processed_img = result_image
             
             # Return the results
             if plate_number:

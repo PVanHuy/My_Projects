@@ -322,7 +322,7 @@ def refresh_register_tab_display(main_window):
 
 
 def upload_image(main_window):
-    """Upload an image file for license plate recognition"""
+    """Upload an image file for license plate recognition with improved performance"""
     try:
         file_name, _ = QFileDialog.getOpenFileName(
             main_window, 
@@ -336,27 +336,53 @@ def upload_image(main_window):
             if not pixmap.isNull():
                 # Create loading effect
                 main_window.original_img.setText("Đang tải ảnh...")
+                main_window.recognition_result.setText("Đang xử lý...")
                 
-                # Use timer to add a small delay for better UX
-                def load_image():
-                    try:
-                        # Hiển thị ảnh với kích thước phù hợp, giữ nguyên tỷ lệ
-                        pixmap_scaled = pixmap.scaled(
-                            main_window.original_img.width() - 20,  # Trừ padding
-                            main_window.original_img.height() - 20, # Trừ padding
-                            Qt.KeepAspectRatio, 
-                            Qt.SmoothTransformation
-                        )
-                        main_window.original_img.setPixmap(pixmap_scaled)
-                        main_window.original_img_path = file_name
+                # Sử dụng QThread để nhận diện biển số không block UI
+                from PyQt5.QtCore import QThread, pyqtSignal
+                
+                class RecognitionWorker(QThread):
+                    resultReady = pyqtSignal(str, object)
+                    
+                    def __init__(self, image_path):
+                        super().__init__()
+                        self.image_path = image_path
                         
-                        # Try to recognize plate number automatically
+                    def run(self):
                         try:
-                            plate_number = recognize_license_plate(file_name)
-
+                            from utils.plate_recognition import recognize_license_plate, process_license_plate_image
+                            plate_number = recognize_license_plate(self.image_path)
+                            processed_img = process_license_plate_image(self.image_path)
+                            
+                            self.resultReady.emit(plate_number, processed_img)
+                        except Exception as e:
+                            logging.error(f"Error in recognition worker: {str(e)}")
+                            self.resultReady.emit(None, None)
+                
+                # Hiển thị ảnh với kích thước phù hợp, giữ nguyên tỷ lệ
+                pixmap_scaled = pixmap.scaled(
+                    main_window.original_img.width() - 20,  # Trừ padding
+                    main_window.original_img.height() - 20, # Trừ padding
+                    Qt.KeepAspectRatio, 
+                    Qt.SmoothTransformation
+                )
+                main_window.original_img.setPixmap(pixmap_scaled)
+                main_window.original_img_path = file_name
+                
+                # Khởi tạo và chạy worker thread
+                recognition_thread = RecognitionWorker(file_name)
+                
+                # Kết nối tín hiệu
+                def handle_recognition_result(plate_number, processed_img):
+                    try:
+                        # Xử lý kết quả nhận dạng biển số
+                        if plate_number:
+                            main_window.plate_input.setText(plate_number)
+                            main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
+                            
                             # Nếu có kết quả thì tra mã tỉnh
-                            if plate_number and len(plate_number) >= 2 and plate_number[:2].isdigit():
-                                # Dictionary mã tỉnh sao chép từ file license_plate_recognizer.py
+                            if len(plate_number) >= 2 and plate_number[:2].isdigit():
+                                # Dictionary mã tỉnh (đã có trong file license_plate_recognizer.py)
                                 province_codes = {
                                     "11": "Cao Bằng", "12": "Lạng Sơn", "14": "Quảng Ninh", "15": "Hải Phòng",
                                     "16": "Hải Phòng", "17": "Thái Bình", "18": "Nam Định", "19": "Phú Thọ",
@@ -387,72 +413,99 @@ def upload_image(main_window):
                                         # Nếu không tìm thấy trong danh sách, ghi vào notes
                                         if hasattr(main_window, 'notes_input'):
                                             main_window.notes_input.setText(f"Tỉnh: {province_name}")
-
-                            if plate_number:
-                                main_window.plate_input.setText(plate_number)
-                                main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
-                                
-                                # Show a notification
-                                QMessageBox.information(
-                                    main_window,
-                                    "Nhận diện tự động",
-                                    f"Đã nhận diện biển số: {plate_number}",
-                                    QMessageBox.Ok
-                                )
-                        except Exception as e:
-                            logging.error(f"Auto recognition error: {str(e)}")
-                            # Recognition failed but image still loaded
-                            pass
+                            
+                            # Hiển thị thông báo thành công
+                            QMessageBox.information(
+                                main_window,
+                                "Nhận diện thành công",
+                                f"Đã nhận diện biển số: {plate_number}",
+                                QMessageBox.Ok
+                            )
+                        else:
+                            main_window.recognition_result.setText("Biển số nhận diện: không nhận diện được")
                         
-                        main_window.original_img.setVisible(True)
-                        main_window.original_img.repaint()
+                        # Hiển thị ảnh đã xử lý (nếu có)
+                        if processed_img is not None:
+                            h, w, ch = processed_img.shape
+                            bytes_per_line = ch * w
+                            convert = QImage(processed_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                            pixmap = QPixmap.fromImage(convert)
+                            
+                            pixmap_scaled = pixmap.scaled(
+                                main_window.processed_img.width() - 20,
+                                main_window.processed_img.height() - 20,
+                                Qt.KeepAspectRatio,
+                                Qt.SmoothTransformation
+                            )
+                            main_window.processed_img.setPixmap(pixmap_scaled)
+                            
+                            # Hiệu ứng animation cho kết quả thành công
+                            setup_animation(main_window.processed_img, "zoom_in")
+                            setup_animation(main_window.recognition_result, "slide_right")
+                        else:
+                            main_window.processed_img.setText("Không thể xử lý ảnh")
                     except Exception as e:
-                        logging.error(f"Error loading image: {str(e)}")
-                        QMessageBox.warning(main_window, "Lỗi", f"Không thể tải ảnh: {str(e)}")
+                        logging.error(f"Error handling recognition result: {str(e)}")
+                        main_window.recognition_result.setText("Lỗi xử lý kết quả nhận diện")
                 
-                # Short delay for loading effect
-                QTimer.singleShot(500, load_image)
+                recognition_thread.resultReady.connect(handle_recognition_result)
+                recognition_thread.start()
+                
+                # Lưu trữ thread vào main_window để tránh bị garbage collected
+                main_window._recognition_thread = recognition_thread
+                
             else:
                 QMessageBox.warning(main_window, "Lỗi", "Không thể tải ảnh, vui lòng thử lại.")
     except Exception as e:
         logging.error(f"Error in upload_image: {str(e)}")
         QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi tải ảnh: {str(e)}")
-
-
 def detect_license_plate(main_window):
-    """Process image to detect and recognize license plate"""
+    """Process image to detect and recognize license plate with improved performance"""
     try:
         if hasattr(main_window, 'original_img_path'):
             # Display loading message
             main_window.processed_img.setText("Đang xử lý ảnh...")
+            main_window.recognition_result.setText("Đang nhận diện...")
             main_window.processed_img.repaint()
+            main_window.recognition_result.repaint()
             
-            def process_image():
+            # Sử dụng QThread để tránh block UI
+            from PyQt5.QtCore import QThread, pyqtSignal
+            
+            class DetectionWorker(QThread):
+                resultReady = pyqtSignal(str, object)
+                
+                def __init__(self, image_path):
+                    super().__init__()
+                    self.image_path = image_path
+                    
+                def run(self):
+                    try:
+                        from utils.plate_recognition import recognize_license_plate, process_license_plate_image
+                        plate_number = recognize_license_plate(self.image_path)
+                        processed_img = process_license_plate_image(self.image_path)
+                        
+                        self.resultReady.emit(plate_number, processed_img)
+                    except Exception as e:
+                        logging.error(f"Error in detection worker: {str(e)}")
+                        self.resultReady.emit(None, None)
+            
+            # Khởi tạo worker thread
+            detection_thread = DetectionWorker(main_window.original_img_path)
+            
+            # Xử lý kết quả
+            def handle_detection_result(plate_number, processed_img):
                 try:
-                    processed_img = process_license_plate_image(main_window.original_img_path)
-                    if processed_img is not None:
-                        h, w, ch = processed_img.shape
-                        bytes_per_line = ch * w
-                        convert = QImage(processed_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                        pixmap = QPixmap.fromImage(convert)
-                        
-                        # Cải thiện cách hiển thị ảnh kết quả
-                        pixmap_scaled = pixmap.scaled(
-                            main_window.processed_img.width() - 20,  # Trừ padding
-                            main_window.processed_img.height() - 20, # Trừ padding
-                            Qt.KeepAspectRatio, 
-                            Qt.SmoothTransformation
-                        )
-                        main_window.processed_img.setPixmap(pixmap_scaled)
-                        
-                        # Try to recognize the plate number
-                        plate_number = recognize_license_plate(main_window.original_img_path)
+                    # Hiển thị biển số nhận dạng được
+                    if plate_number:
                         main_window.recognition_result.setText(f"Biển số nhận diện: {plate_number}")
                         
-                        # Update the plate input field if not already filled
-                        if not main_window.plate_input.text() and plate_number:
+                        # Cập nhật trường biển số nếu chưa được điền
+                        if not main_window.plate_input.text():
                             main_window.plate_input.setText(plate_number)
-                            if plate_number and len(plate_number) >= 2 and plate_number[:2].isdigit():
+                            
+                            # Kiểm tra và cập nhật tỉnh thành từ mã biển số
+                            if len(plate_number) >= 2 and plate_number[:2].isdigit():
                                 # Dictionary mã tỉnh
                                 province_codes = {
                                     "11": "Cao Bằng", "12": "Lạng Sơn", "14": "Quảng Ninh", "15": "Hải Phòng",
@@ -486,23 +539,42 @@ def detect_license_plate(main_window):
                                             current_notes = main_window.notes_input.text()
                                             if not current_notes:
                                                 main_window.notes_input.setText(f"Tỉnh: {province_name}")
+                    else:
+                        main_window.recognition_result.setText("Biển số nhận diện: không thành công")
+                    
+                    # Hiển thị ảnh đã xử lý
+                    if processed_img is not None:
+                        h, w, ch = processed_img.shape
+                        bytes_per_line = ch * w
+                        convert = QImage(processed_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                        pixmap = QPixmap.fromImage(convert)
                         
-                        # Show a success animation
+                        pixmap_scaled = pixmap.scaled(
+                            main_window.processed_img.width() - 20,
+                            main_window.processed_img.height() - 20,
+                            Qt.KeepAspectRatio,
+                            Qt.SmoothTransformation
+                        )
+                        main_window.processed_img.setPixmap(pixmap_scaled)
+                        
+                        # Hiệu ứng animation cho kết quả thành công
                         setup_animation(main_window.processed_img, "zoom_in")
                         setup_animation(main_window.recognition_result, "slide_right")
                     else:
-                        QMessageBox.warning(main_window, "Lỗi", "Không thể xử lý ảnh, vui lòng thử lại.")
+                        main_window.processed_img.setText("Không thể xử lý ảnh")
+                        
                 except Exception as e:
-                    logging.error(f"Error processing image: {str(e)}")
-                    QMessageBox.warning(main_window, "Lỗi", f"Xử lý ảnh thất bại: {str(e)}")
-                
-                main_window.processed_img.setVisible(True)
-                main_window.processed_img.repaint()
-                main_window.recognition_result.setVisible(True)
-                main_window.recognition_result.repaint()
+                    logging.error(f"Error handling detection result: {str(e)}")
+                    main_window.processed_img.setText("Lỗi xử lý ảnh")
+                    main_window.recognition_result.setText("Lỗi xử lý kết quả nhận diện")
             
-            # Short delay for processing effect
-            QTimer.singleShot(1000, process_image)
+            # Kết nối tín hiệu và bắt đầu thread
+            detection_thread.resultReady.connect(handle_detection_result)
+            detection_thread.start()
+            
+            # Lưu trữ thread vào main_window để tránh bị garbage collected
+            main_window._detection_thread = detection_thread
+            
         else:
             QMessageBox.warning(
                 main_window, 
@@ -512,8 +584,6 @@ def detect_license_plate(main_window):
     except Exception as e:
         logging.error(f"Error in detect_license_plate: {str(e)}")
         QMessageBox.critical(main_window, "Lỗi", f"Có lỗi xảy ra khi nhận diện biển số: {str(e)}")
-
-
 def register_vehicle(main_window):
     """Register a new vehicle with the entered information"""
     try:
