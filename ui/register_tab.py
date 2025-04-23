@@ -1,11 +1,10 @@
-# ui/register_tab.py
 from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog,
     QMessageBox, QFrame, QGroupBox, QFormLayout, QSplitter, QWidget,
-    QComboBox, QCompleter, QGraphicsDropShadowEffect, QGridLayout, QScrollArea
+    QComboBox, QCompleter, QGraphicsDropShadowEffect, QGridLayout, QScrollArea,QDialog
 )
 from PyQt5.QtGui import QPixmap, QImage, QFont, QIcon, QColor
-from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5.QtCore import Qt, QTimer, QSize,pyqtSignal, QThread
 
 from colors.my_colors import MyColor
 from ui.style import setup_animation, create_title_label, create_styled_button
@@ -13,7 +12,180 @@ from utils.app_icons import AppIcons
 from utils.plate_recognition import recognize_license_plate, process_license_plate_image
 from database.db_manager import DatabaseManager
 import logging
+import cv2
+import os
+import numpy as np
+from datetime import datetime
+import time
 
+class CameraThread(QThread):
+    frame_update = pyqtSignal(QImage)  # Tín hiệu cập nhật frame
+    error = pyqtSignal(str)  # Tín hiệu báo lỗi
+    
+    def __init__(self, camera_id=0):
+        super().__init__()
+        self.camera_id = camera_id
+        self.running = False
+        self.capture = None
+    
+    def run(self):
+        try:
+            self.capture = cv2.VideoCapture(self.camera_id)
+            if not self.capture.isOpened():
+                self.error.emit("Không thể mở camera. Vui lòng kiểm tra kết nối camera.")
+                return
+                
+            self.running = True
+            
+            while self.running:
+                ret, frame = self.capture.read()
+                if not ret:
+                    self.error.emit("Không thể đọc frame từ camera.")
+                    break
+                
+                # Chuyển đổi frame thành QImage để hiển thị trên Qt UI
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = rgb_frame.shape
+                bytes_per_line = ch * w
+                qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                
+                # Phát tín hiệu với frame mới
+                self.frame_update.emit(qt_image)
+                
+                # Tạm dừng một chút để giảm tải CPU
+                self.msleep(30)  # ~30 FPS
+        except Exception as e:
+            self.error.emit(f"Lỗi camera: {str(e)}")
+        finally:
+            if self.capture and self.capture.isOpened():
+                self.capture.release()
+    
+    def stop(self):
+        """Dừng thread camera"""
+        self.running = False
+        self.wait()
+        if self.capture and self.capture.isOpened():
+            self.capture.release()
+
+class CameraDialog(QDialog):
+    image_captured = pyqtSignal(QImage, str)  # Tín hiệu khi ảnh được chụp (QImage và đường dẫn file)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Camera - Chụp ảnh biển số")
+        self.setMinimumSize(800, 600)
+        
+        # Tạo thư mục lưu ảnh chụp nếu chưa tồn tại
+        self.capture_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "captures")
+        os.makedirs(self.capture_dir, exist_ok=True)
+        
+        # Khởi tạo camera thread
+        self.camera_thread = CameraThread()
+        self.camera_thread.frame_update.connect(self.update_frame)
+        self.camera_thread.error.connect(self.handle_camera_error)
+        
+        # Thiết lập giao diện
+        self.setup_ui()
+        
+        # Khi dialog được đóng, dừng thread camera
+        self.finished.connect(self.close_camera)
+    
+    def setup_ui(self):
+        """Thiết lập giao diện dialog camera"""
+        layout = QVBoxLayout(self)
+        
+        # Hiển thị trạng thái
+        self.status_label = QLabel("Sẵn sàng chụp ảnh biển số")
+        self.status_label.setFont(QFont("Arial", 12, QFont.Bold))
+        self.status_label.setStyleSheet(f"color: {MyColor.SUCCESS};")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        # Label hiển thị video từ camera
+        self.camera_view = QLabel()
+        self.camera_view.setAlignment(Qt.AlignCenter)
+        self.camera_view.setMinimumSize(640, 480)
+        self.camera_view.setFrameShape(QFrame.StyledPanel)
+        self.camera_view.setStyleSheet(f"""
+            background-color: {MyColor.BLACK};
+            border: 1px solid {MyColor.PRIMARY};
+            border-radius: 5px;
+        """)
+        self.camera_view.setText("Đang kết nối camera...")
+        
+        layout.addWidget(self.camera_view)
+        
+        # Nút chức năng
+        button_layout = QHBoxLayout()
+        
+        # Nút chụp ảnh
+        self.capture_btn = create_styled_button("Chụp ảnh", "camera", "success")
+        self.capture_btn.clicked.connect(self.capture_image)
+        
+        # Nút đóng camera
+        close_btn = create_styled_button("Đóng camera", "cancel", "danger")
+        close_btn.clicked.connect(self.reject)
+        
+        # Thêm các nút vào layout
+        button_layout.addWidget(self.capture_btn)
+        button_layout.addWidget(close_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Chạy camera khi dialog được mở
+        self.camera_thread.start()
+    
+    def update_frame(self, image):
+        """Cập nhật frame từ camera lên UI"""
+        pixmap = QPixmap.fromImage(image)
+        self.camera_view.setPixmap(pixmap.scaled(
+            self.camera_view.width(),
+            self.camera_view.height(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        ))
+        
+        # Lưu frame hiện tại để có thể chụp nhanh
+        self.current_frame = image
+    
+    def handle_camera_error(self, error_message):
+        """Xử lý lỗi từ camera thread"""
+        QMessageBox.critical(self, "Lỗi Camera", error_message)
+        self.reject()  # Đóng dialog nếu có lỗi
+    
+    def capture_image(self):
+        """Chụp ảnh từ camera"""
+        if hasattr(self, 'current_frame'):
+            # Tạo tên file dựa trên thời gian hiện tại
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_path = os.path.join(self.capture_dir, f"capture_{timestamp}.jpg")
+            
+            # Lưu ảnh
+            self.current_frame.save(file_path)
+            
+            # Phát tín hiệu với ảnh đã chụp và đường dẫn file
+            self.image_captured.emit(self.current_frame, file_path)
+            
+            # Hiển thị thông báo thành công
+            QMessageBox.information(self, "Thành công", f"Đã chụp ảnh thành công!\nFile được lưu tại: {file_path}")
+            
+            # Thêm tùy chọn cho người dùng đóng cửa sổ hoặc chụp lại
+            reply = QMessageBox.question(
+                self, 
+                "Tiếp tục?", 
+                "Bạn có muốn đóng camera để nhận diện biển số không?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            # Chỉ đóng dialog nếu người dùng chọn Yes
+            if reply == QMessageBox.Yes:
+                self.accept()
+    
+    def close_camera(self):
+        """Dừng camera thread khi đóng dialog"""
+        self.camera_thread.stop()
+        
 # Cấu hình logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -268,10 +440,23 @@ def setup_recognition_section(main_window, parent_layout):
     
     # --- PHẦN CÁC NÚT ĐIỀU KHIỂN ---
     # Container cho các nút - hàng thứ 2 trong grid
+    button_container = QWidget()
+    button_layout = QHBoxLayout(button_container)
+    button_layout.setContentsMargins(0, 0, 0, 0)
+    button_layout.setSpacing(10)
+    
     upload_btn = create_styled_button("Tải ảnh lên", "upload", "secondary")
     upload_btn.setMinimumWidth(150)
     upload_btn.clicked.connect(lambda: upload_image(main_window))
-    grid_layout.addWidget(upload_btn, 2, 0, Qt.AlignCenter)
+    button_layout.addWidget(upload_btn)
+    
+    # Thêm nút mở camera
+    camera_btn = create_styled_button("Mở camera", "camera", "secondary")
+    camera_btn.setMinimumWidth(150)
+    camera_btn.clicked.connect(lambda: open_camera(main_window))
+    button_layout.addWidget(camera_btn)
+    
+    grid_layout.addWidget(button_container, 2, 0, Qt.AlignCenter)
     
     detect_btn = create_styled_button("Nhận diện biển số", "detect", "primary")
     detect_btn.setMinimumWidth(150)
@@ -710,3 +895,43 @@ def clear_register_form(main_window):
     # Clear stored image path
     if hasattr(main_window, 'original_img_path'):
         delattr(main_window, 'original_img_path')
+def open_camera(main_window):
+    """Mở camera để chụp ảnh biển số"""
+    try:
+        # Tạo và hiển thị dialog camera
+        camera_dialog = CameraDialog(main_window)
+        
+        # Kết nối tín hiệu khi chụp ảnh thành công
+        def handle_captured_image(image, file_path):
+            if image and file_path:
+                # Hiển thị ảnh đã chụp lên original_img
+                pixmap = QPixmap.fromImage(image)
+                pixmap_scaled = pixmap.scaled(
+                    main_window.original_img.width() - 20,
+                    main_window.original_img.height() - 20,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+                main_window.original_img.setPixmap(pixmap_scaled)
+                
+                # Lưu đường dẫn file để xử lý sau
+                main_window.original_img_path = file_path
+                
+                # KHÔNG tự động nhận diện biển số ngay lập tức
+                # Nhận diện sẽ chỉ được thực hiện khi dialog camera đóng
+        
+        # Kết nối tín hiệu
+        camera_dialog.image_captured.connect(handle_captured_image)
+        
+        # Hiển thị dialog
+        result = camera_dialog.exec_()
+        
+        # Chỉ nhận diện biển số sau khi dialog đóng VÀ có ảnh
+        if result == QDialog.Accepted and hasattr(main_window, 'original_img_path'):
+            # Tự động nhận diện biển số
+            detect_license_plate(main_window)
+        
+    except Exception as e:
+        logging.error(f"Error opening camera: {str(e)}")
+        QMessageBox.critical(main_window, "Lỗi Camera", 
+                          f"Không thể mở camera: {str(e)}\n\nVui lòng kiểm tra kết nối camera.")
